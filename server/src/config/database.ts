@@ -55,26 +55,42 @@ function attachConnectionListeners(): void {
   });
 }
 
+/**
+ * Connects to MongoDB.
+ * Tries the primary URI (env.MONGODB_URI or supplied uri) first.
+ * If that fails and we are in development, falls back to a local MongoDB instance.
+ * Returns true on successful connection, false otherwise.
+ */
 export async function connectDatabase(uri?: string): Promise<boolean> {
-  const connectionUri = uri !== undefined ? uri : env.MONGODB_URI;
+  const primaryUri = uri ?? env.MONGODB_URI;
+  const fallbackUri = 'mongodb://127.0.0.1:27017/apnavault';
 
-  if (!connectionUri || !connectionUri.trim()) {
-    console.warn('[Database] MONGODB_URI is not provided. Skipping database connection.');
-    return false;
+  const tryConnect = async (connectionUri: string): Promise<boolean> => {
+    if (!connectionUri || !connectionUri.trim()) {
+      console.warn('[Database] MONGODB_URI is not provided. Skipping database connection.');
+      return false;
+    }
+    attachConnectionListeners();
+    try {
+      await mongoose.connect(connectionUri, { serverSelectionTimeoutMS: 5000 });
+      return true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[Database] Failed to connect to MongoDB at ${connectionUri}: ${message}`);
+      return false;
+    }
+  };
+
+  // Attempt primary URI
+  if (await tryConnect(primaryUri)) return true;
+
+  // Fallback in development environment
+  if (env.NODE_ENV === 'development' && primaryUri !== fallbackUri) {
+    console.warn('[Database] Falling back to local MongoDB instance.');
+    if (await tryConnect(fallbackUri)) return true;
   }
 
-  attachConnectionListeners();
-
-  try {
-    await mongoose.connect(connectionUri, {
-      serverSelectionTimeoutMS: 5000,
-    });
-    return true;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[Database] Failed to connect to MongoDB: ${message}`);
-    return false;
-  }
+  return false;
 }
 
 export async function disconnectDatabase(): Promise<void> {
