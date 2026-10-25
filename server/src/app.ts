@@ -22,15 +22,17 @@ if (env.NODE_ENV === 'production') {
 // Security headers
 app.use(helmet());
 
-// Strict CORS configuration
-app.use(
-  cors({
-    origin: [env.CLIENT_URL, env.FRONTEND_URL],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-XSRF-Token'],
-  })
-);
+// CORS configuration – allow any origin in development for flexibility, restrict in production
+const corsOptions = env.NODE_ENV === 'development' ? {
+  origin: true, // reflect request origin
+  credentials: true,
+} : {
+  origin: [env.CLIENT_URL, env.FRONTEND_URL],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-XSRF-Token'],
+};
+app.use(cors(corsOptions));
 
 // Cookie parsing
 app.use(cookieParser(env.SESSION_SECRET));
