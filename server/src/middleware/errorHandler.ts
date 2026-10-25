@@ -1,16 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/AppError.js';
 import { env } from '../config/env.js';
-
-interface ErrorResponse {
-  success: false;
-  error: {
-    message: string;
-    code?: string;
-    details?: unknown;
-    stack?: string;
-  };
-}
+import { sendError } from '../utils/apiResponse.js';
 
 export function errorHandler(
   err: Error | AppError,
@@ -20,25 +11,26 @@ export function errorHandler(
 ): void {
   const isAppError = err instanceof AppError;
   const statusCode = isAppError ? err.statusCode : 500;
+
+  // Never expose internal database/system errors or stack traces in production
   const message =
     isAppError || env.NODE_ENV !== 'production'
       ? err.message
       : 'An unexpected internal server error occurred';
 
-  // Do not log sensitive credentials, passwords, or personal data
-  console.error(`[Error] [${statusCode}] ${err.message}`);
-  if (env.NODE_ENV === 'development' && err.stack) {
-    console.error(err.stack);
+  // Redact secrets and sensitive tokens if logging
+  const safeMessage = err.message.replace(
+    /(password|token|secret|authorization|bearer)[^\s,;]+/gi,
+    '[REDACTED]'
+  );
+
+  if (env.NODE_ENV !== 'test') {
+    console.error(`[Error] [${statusCode}] ${safeMessage}`);
+    if (env.NODE_ENV === 'development' && err.stack) {
+      console.error(err.stack);
+    }
   }
 
-  const response: ErrorResponse = {
-    success: false,
-    error: {
-      message,
-      ...(isAppError && err.details ? { details: err.details } : {}),
-      ...(env.NODE_ENV === 'development' && err.stack ? { stack: err.stack } : {}),
-    },
-  };
-
-  res.status(statusCode).json(response);
+  const details = isAppError ? err.details : undefined;
+  sendError(res, message, statusCode, isAppError ? undefined : 'INTERNAL_SERVER_ERROR', details);
 }
