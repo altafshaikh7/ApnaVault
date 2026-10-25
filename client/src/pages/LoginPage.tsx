@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { AuthLayout } from '../layouts/AuthLayout.js';
 import { Input } from '../components/common/Input.js';
 import { Button } from '../components/common/Button.js';
+import { useAuth } from '../context/AuthContext.js';
+import { ApiException } from '../types/api.js';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please enter both your email address and password.');
@@ -22,12 +29,20 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
 
-    // In Phase 2 frontend shell:
-    // Authentication endpoints will be wired in Phase 4.
-    setTimeout(() => {
+    try {
+      await login(email, password);
+      navigate(from, { replace: true });
+    } catch (err: unknown) {
+      if (err instanceof ApiException) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Unable to sign in. Please verify your credentials and try again.');
+      }
+    } finally {
       setIsLoading(false);
-      navigate('/dashboard');
-    }, 600);
+    }
   };
 
   return (
@@ -68,9 +83,12 @@ export const LoginPage: React.FC = () => {
             leftIcon={<Lock className="w-4 h-4" />}
           />
           <div className="flex justify-end mt-1.5">
-            <span className="text-[11px] text-slate-500 hover:text-slate-900 cursor-pointer">
+            <Link
+              to="/forgot-password"
+              className="text-[11px] text-slate-500 hover:text-slate-900 transition-colors"
+            >
               Forgot password?
-            </span>
+            </Link>
           </div>
         </div>
 

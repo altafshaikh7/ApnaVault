@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { AuthLayout } from '../layouts/AuthLayout.js';
 import { Input } from '../components/common/Input.js';
 import { Button } from '../components/common/Button.js';
+import { useAuth } from '../context/AuthContext.js';
+import { ApiException } from '../types/api.js';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  const { register } = useAuth();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,15 +18,23 @@ export const RegisterPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Password policy validation indicators
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+  const isPasswordValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecial;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password || !confirmPassword) {
       setError('Please fill in all required fields.');
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (!isPasswordValid) {
+      setError('Password does not meet all security policy requirements.');
       return;
     }
 
@@ -34,11 +46,20 @@ export const RegisterPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
 
-    // Authentication endpoints will be wired in Phase 4.
-    setTimeout(() => {
+    try {
+      await register(name, email, password);
+      navigate('/dashboard', { replace: true });
+    } catch (err: unknown) {
+      if (err instanceof ApiException) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Unable to create account. Please check your details and try again.');
+      }
+    } finally {
       setIsLoading(false);
-      navigate('/dashboard');
-    }, 600);
+    }
   };
 
   return (
@@ -77,15 +98,38 @@ export const RegisterPage: React.FC = () => {
           leftIcon={<Mail className="w-4 h-4" />}
         />
 
-        <Input
-          label="Password"
-          type="password"
-          required
-          placeholder="At least 8 characters"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          leftIcon={<Lock className="w-4 h-4" />}
-        />
+        <div>
+          <Input
+            label="Password"
+            type="password"
+            required
+            placeholder="••••••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            leftIcon={<Lock className="w-4 h-4" />}
+          />
+
+          {password.length > 0 && (
+            <div className="mt-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-[11px] space-y-1">
+              <div className="font-semibold text-slate-600 mb-1">Password Requirements:</div>
+              <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-emerald-700' : 'text-slate-400'}`}>
+                <CheckCircle2 className="w-3 h-3" /> At least 8 characters
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasUppercase ? 'text-emerald-700' : 'text-slate-400'}`}>
+                <CheckCircle2 className="w-3 h-3" /> One uppercase letter (A-Z)
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasLowercase ? 'text-emerald-700' : 'text-slate-400'}`}>
+                <CheckCircle2 className="w-3 h-3" /> One lowercase letter (a-z)
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasNumber ? 'text-emerald-700' : 'text-slate-400'}`}>
+                <CheckCircle2 className="w-3 h-3" /> One number (0-9)
+              </div>
+              <div className={`flex items-center gap-1.5 ${hasSpecial ? 'text-emerald-700' : 'text-slate-400'}`}>
+                <CheckCircle2 className="w-3 h-3" /> One special character (!@#$%^&*)
+              </div>
+            </div>
+          )}
+        </div>
 
         <Input
           label="Confirm Password"

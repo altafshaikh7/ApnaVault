@@ -2,6 +2,18 @@ import { ApiException } from '../types/api.js';
 
 const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1').replace(/\/$/, '');
 
+let inMemoryCsrfToken: string | null = null;
+
+export function setApiCsrfToken(token: string | null): void {
+  inMemoryCsrfToken = token;
+}
+
+export function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(^|;\\s*)(${name})=([^;]*)`));
+  return match ? decodeURIComponent(match[3]) : null;
+}
+
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
@@ -24,12 +36,18 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     }
   }
 
-  const defaultHeaders: HeadersInit = {
+  // Check for CSRF token from memory or cookie
+  const csrfToken = inMemoryCsrfToken || getCookie('apnavault_csrf');
+
+  const defaultHeaders: Record<string, string> = {
     Accept: 'application/json',
     ...(customConfig.body && !(customConfig.body instanceof FormData)
       ? { 'Content-Type': 'application/json' }
       : {}),
-    ...headers,
+    ...(csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(customConfig.method || 'GET')
+      ? { 'X-CSRF-Token': csrfToken }
+      : {}),
+    ...(headers as Record<string, string>),
   };
 
   try {
@@ -56,10 +74,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         errorDetails = errorData?.error?.details || errorData?.details;
       } catch {
         // Response was not JSON
-      }
-
-      if (response.status === 401) {
-        // Unauthorized - future phases can trigger session expiration events
       }
 
       throw new ApiException(errorMessage, response.status, errorCode, errorDetails);
@@ -116,4 +130,5 @@ export const apiClient = {
     request<T>(endpoint, { ...options, method: 'DELETE' }),
 
   getBaseUrl: () => BASE_URL,
+  setCsrfToken: setApiCsrfToken,
 };
