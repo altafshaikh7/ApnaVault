@@ -15,7 +15,9 @@
     "build:server": "npm run build --workspace=server",
     "type-check": "npm run type-check:server && npm run type-check:client",
     "type-check:client": "npm run type-check --workspace=client",
-    "type-check:server": "npm run type-check --workspace=server"
+    "type-check:server": "npm run type-check --workspace=server",
+    "test": "npm run test:server",
+    "test:server": "npm run test --workspace=server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
