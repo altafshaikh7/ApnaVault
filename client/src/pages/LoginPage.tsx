@@ -4,7 +4,7 @@ import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { AuthLayout } from '../layouts/AuthLayout.js';
 import { Input } from '../components/common/Input.js';
 import { Button } from '../components/common/Button.js';
-import { useAuth } from '../context/AuthContext.js';
+import { useAuth } from '../hooks/useAuth.js';
 import { ApiException } from '../types/api.js';
 
 export const LoginPage: React.FC = () => {
