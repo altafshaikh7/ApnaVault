@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Calendar, Tag, MoreVertical, ExternalLink } from 'lucide-react';
 import type { DocumentItem } from '../../types/document.js';
@@ -16,24 +16,36 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
   onArchive,
   onDelete,
 }) => {
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!document.expiryDate) return;
+
+    let intervalId: number | undefined;
+    const timeoutId = window.setTimeout(() => {
+      setCurrentTime(Date.now());
+      intervalId = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [document.expiryDate]);
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const isExpiringSoon = (): boolean => {
-    if (!document.expiryDate) return false;
-    const diffDays = Math.ceil(
-      (new Date(document.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return diffDays > 0 && diffDays <= 30;
-  };
-
-  const isExpired = (): boolean => {
-    if (!document.expiryDate) return false;
-    return new Date(document.expiryDate).getTime() < new Date().getTime();
-  };
+  const expiryTime = document.expiryDate ? Date.parse(document.expiryDate) : null;
+  const diffDays =
+    expiryTime !== null && currentTime !== null
+      ? Math.ceil((expiryTime - currentTime) / (1000 * 60 * 60 * 24))
+      : null;
+  const isExpired = expiryTime !== null && currentTime !== null && expiryTime < currentTime;
+  const isExpiringSoon = diffDays !== null && diffDays > 0 && diffDays <= 30;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between group">
@@ -129,15 +141,15 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
         {document.expiryDate ? (
           <span
             className={`inline-flex items-center gap-1 font-medium ${
-              isExpired()
+              isExpired
                 ? 'text-rose-600'
-                : isExpiringSoon()
+                : isExpiringSoon
                 ? 'text-amber-600'
                 : 'text-slate-500'
             }`}
           >
             <Calendar className="w-3 h-3" />
-            {isExpired() ? 'Expired' : `Expires ${document.expiryDate}`}
+            {isExpired ? 'Expired' : `Expires ${document.expiryDate}`}
           </span>
         ) : (
           <span>No Expiry</span>
