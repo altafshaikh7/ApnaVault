@@ -27,6 +27,17 @@ describe('Environment Configuration Validation', () => {
     expect(config.RATE_LIMIT_MAX_REQUESTS).toBe(1000);
   });
 
+  it('should treat blank Supabase settings as unconfigured', () => {
+    const config = validateEnv({
+      NODE_ENV: 'test',
+      SUPABASE_URL: '',
+      SUPABASE_SERVICE_ROLE_KEY: '   ',
+    });
+
+    expect(config.SUPABASE_URL).toBeUndefined();
+    expect(config.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+  });
+
   it('should throw an error when CLIENT_URL is not a valid URL', () => {
     expect(() =>
       validateEnv({
