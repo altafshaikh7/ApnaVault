@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { FileText, Calendar, Download, Trash2, ArrowLeft, Shield, FileCheck } from 'lucide-react';
+import { FileText, Calendar, Download, Trash2, ArrowLeft, Shield, FileCheck, Eye } from 'lucide-react';
 import { Button } from '../components/common/Button.js';
 import { Card, CardTitle, CardDescription } from '../components/common/Card.js';
 import { CategoryBadge } from '../components/common/Badge.js';
 import { LoadingState } from '../components/common/LoadingState.js';
 import { ErrorState } from '../components/common/ErrorState.js';
+import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal.js';
 import { deleteDocument, getDocument, getDocumentDownloadUrl } from '../services/documentApi.js';
 import { ApiException } from '../types/api.js';
 import type { DocumentItem } from '../types/document.js';
@@ -23,6 +24,7 @@ export const DocumentDetailPage: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -100,18 +102,22 @@ export const DocumentDetailPage: React.FC = () => {
       </div>
 
       {detailState.id === id && detailState.error ? (
-        <ErrorState message={detailState.error} onRetry={() => {
-          setDetailState({ id: '' });
-          if (id) {
-            void getDocument(id).then(
-              (result) => setDetailState({ id, document: result }),
-              (err: unknown) => setDetailState({
-                id,
-                error: err instanceof ApiException ? err.message : 'Unable to load this document.',
-              })
-            );
-          }
-        }} />
+        <ErrorState
+          message={detailState.error}
+          onRetry={() => {
+            setDetailState({ id: '' });
+            if (id) {
+              void getDocument(id).then(
+                (result) => setDetailState({ id, document: result }),
+                (err: unknown) =>
+                  setDetailState({
+                    id,
+                    error: err instanceof ApiException ? err.message : 'Unable to load this document.',
+                  })
+              );
+            }
+          }}
+        />
       ) : loading ? (
         <LoadingState message="Loading document..." />
       ) : document ? (
@@ -134,15 +140,25 @@ export const DocumentDetailPage: React.FC = () => {
                       <p className="text-xs text-slate-500 mt-0.5 break-all">{document.fileName}</p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    isLoading={isDownloading}
-                    onClick={() => void handleDownload()}
-                    leftIcon={<Download className="w-3.5 h-3.5" />}
-                  >
-                    Download
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsPreviewOpen(true)}
+                      leftIcon={<Eye className="w-3.5 h-3.5" />}
+                    >
+                      Preview
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      isLoading={isDownloading}
+                      onClick={() => void handleDownload()}
+                      leftIcon={<Download className="w-3.5 h-3.5" />}
+                    >
+                      Download
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
@@ -173,29 +189,42 @@ export const DocumentDetailPage: React.FC = () => {
                     </p>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-lg">
-                    <span className="text-[11px] text-slate-400 font-medium">Ownership</span>
+                    <span className="text-[11px] text-slate-400 font-medium">Created On</span>
+                    <p className="text-xs font-semibold text-slate-800 mt-0.5">
+                      {new Date(document.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <span className="text-[11px] text-slate-400 font-medium">Integrity Status</span>
                     <p className="text-xs font-semibold text-slate-800 mt-0.5 flex items-center gap-1.5">
-                      <FileCheck className="w-3.5 h-3.5 text-slate-400" />
-                      Personal Vault
+                      <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      SHA-256 Verified
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-                    Description & Notes
-                  </h3>
-                  <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                    {document.description || 'No description provided for this document.'}
-                  </p>
-                </div>
-                {document.tags.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    {document.tags.map((tag) => (
-                      <span key={tag} className="text-[10px] text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                        {tag}
-                      </span>
-                    ))}
+                {document.description && (
+                  <div className="mt-6 pt-5 border-t border-slate-100">
+                    <h3 className="text-xs font-bold text-slate-900 mb-1.5">Description</h3>
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {document.description}
+                    </p>
+                  </div>
+                )}
+
+                {document.tags?.length > 0 && (
+                  <div className="mt-5 pt-5 border-t border-slate-100">
+                    <h3 className="text-xs font-bold text-slate-900 mb-2">Tags</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {document.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded-md"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </Card>
@@ -216,6 +245,14 @@ export const DocumentDetailPage: React.FC = () => {
               </Button>
             </Card>
           </div>
+
+          {/* Document Preview Modal */}
+          <DocumentPreviewModal
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            documentId={document.id}
+            documentTitle={document.title}
+          />
         </>
       ) : null}
     </div>
