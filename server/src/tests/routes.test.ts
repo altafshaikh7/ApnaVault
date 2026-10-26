@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../app.js';
+import { env } from '../config/env.js';
+import { isVitestEnv } from '../middleware/rateLimiter.js';
 
 describe('API Foundation & Health Check Routes', () => {
   it('GET /api/v1/health should return 200 with healthy status and database info', async () => {
@@ -46,5 +48,44 @@ describe('API Foundation & Health Check Routes', () => {
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
     expect(res.body.error.message).toContain('Route not found');
+  });
+
+  it('GET /api/v1/unregistered-route with query parameters should not leak query params in 404 error (F-04)', async () => {
+    const res = await request(app).get('/api/v1/unregistered-route?token=super_secret_token_123&foo=bar');
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.message).toBe('Route not found: GET /api/v1/unregistered-route');
+    expect(res.body.error.message).not.toContain('super_secret_token_123');
+    expect(res.body.error.message).not.toContain('foo');
+  });
+
+  it('CORS should only allow configured client origins and reject untrusted origins (F-01)', async () => {
+    // Allowed origin
+    const allowedRes = await request(app)
+      .get('/api/v1/health')
+      .set('Origin', env.CLIENT_URL);
+
+    expect(allowedRes.headers['access-control-allow-origin']).toBe(env.CLIENT_URL);
+    expect(allowedRes.headers['access-control-allow-credentials']).toBe('true');
+
+    // Untrusted origin
+    const blockedRes = await request(app)
+      .get('/api/v1/health')
+      .set('Origin', 'http://malicious-attacker.com');
+
+    expect(blockedRes.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('rate limiter skip should strictly be bound to Vitest environment (F-07)', () => {
+    expect(isVitestEnv()).toBe(true);
+
+    const originalVitest = process.env.VITEST;
+    try {
+      delete process.env.VITEST;
+      expect(isVitestEnv()).toBe(false);
+    } finally {
+      process.env.VITEST = originalVitest;
+    }
   });
 });
