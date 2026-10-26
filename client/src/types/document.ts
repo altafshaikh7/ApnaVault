@@ -31,7 +31,6 @@ export interface DocumentItem {
   issueDate?: string;
   expiryDate?: string;
   renewalDate?: string;
-  ownerId: string;
   workspaceId?: string;
   isArchived: boolean;
   createdAt: string;
