@@ -56,3 +56,10 @@ export const resetPasswordSchema = z.object({
   token: z.string().trim().min(1, 'Password reset token is required'),
   password: passwordPolicySchema,
 });
+
+// Profile update schema – allows only mutable fields.
+export const profileUpdateSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters long').max(100, 'Name cannot exceed 100 characters').optional(),
+  phone: z.string().trim().optional(),
+  timezone: z.string().trim().optional(),
+}).strict();
