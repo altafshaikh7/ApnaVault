@@ -8,4 +8,7 @@ export interface NotificationItem {
   isRead: boolean;
   createdAt: string;
   linkUrl?: string;
+  invitationId?: string;
+  role?: string;
+  workspaceName?: string;
 }
