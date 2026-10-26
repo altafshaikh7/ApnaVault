@@ -23,7 +23,7 @@ import { AppError } from '../utils/AppError.js';
 import { MAX_FILE_SIZE, validateFile } from '../utils/fileValidator.js';
 import { env } from '../config/env.js';
 import { DocumentService } from '../services/documentService.js';
-import { StorageServiceError } from '../services/storageService.js';
+import { StorageServiceError, SIGNED_URL_EXPIRY_SECONDS } from '../services/storageService.js';
 import { describeSmokeFailure } from '../scripts/supabaseSmokeDiagnostics.js';
 import { getSupabaseServerKeyType } from '../config/supabaseKey.js';
 
@@ -290,6 +290,7 @@ describe('Document API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.data.document.fileName).toBe('identity.pdf');
+    expect(response.body.data.document.ownerId).toBeUndefined();
     expect(response.body.data.document.fileChecksum).toBe(
       '9260151371056588d1d4eb733b7d9a76cea400bc4ac4cec6f0b4a69319cceeb3'
     );
@@ -401,7 +402,7 @@ describe('Document API', () => {
       .set('Cookie', cookie);
     expect(download.status).toBe(200);
     expect(download.body.data.url).toBe('https://storage.example/signed-document');
-    expect(signedUrl).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f-]{36}$/i), 60);
+    expect(signedUrl).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f-]{36}$/i), SIGNED_URL_EXPIRY_SECONDS);
 
     const deletion = await request(app)
       .delete(`/api/v1/documents/${id}`)
