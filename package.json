@@ -20,6 +20,7 @@
     "test:server": "npm run test --workspace=server"
   },
   "devDependencies": {
+    "@types/multer": "^2.3.0",
     "concurrently": "^9.1.2"
   }
 }
