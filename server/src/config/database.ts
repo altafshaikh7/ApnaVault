@@ -56,6 +56,16 @@ function attachConnectionListeners(): void {
 }
 
 /**
+ * Redacts password credentials from a MongoDB connection URI for safe logging (Finding PR-03).
+ */
+export function sanitizeMongoUri(uri: string): string {
+  if (!uri || typeof uri !== 'string') return '';
+  return uri.replace(/\/\/(?:([^:]+)(?::([^@]+))?@)/, (_, username) => {
+    return `//${username ? `${username}:***@` : '***@'}`;
+  });
+}
+
+/**
  * Connects to MongoDB.
  * Tries the primary URI (env.MONGODB_URI or supplied uri) first.
  * If that fails and we are in development, falls back to a local MongoDB instance.
@@ -75,8 +85,9 @@ export async function connectDatabase(uri?: string): Promise<boolean> {
       await mongoose.connect(connectionUri, { serverSelectionTimeoutMS: 5000 });
       return true;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[Database] Failed to connect to MongoDB at ${connectionUri}: ${message}`);
+      const safeUri = sanitizeMongoUri(connectionUri);
+      const safeMessage = sanitizeMongoUri(error instanceof Error ? error.message : String(error));
+      console.error(`[Database] Failed to connect to MongoDB at ${safeUri}: ${safeMessage}`);
       return false;
     }
   };
