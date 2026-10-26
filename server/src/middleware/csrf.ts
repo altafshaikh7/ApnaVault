@@ -37,21 +37,27 @@ export function validateCsrf(req: Request, _res: Response, next: NextFunction): 
     }
   }
 
-  // 2. Token-based CSRF validation for cookie-authenticated or CSRF-protected requests
+  // 2. Token-based CSRF validation for cookie-authenticated or browser-origin requests (Finding F-02)
   const headerToken =
     (req.headers['x-csrf-token'] as string) || (req.headers['x-xsrf-token'] as string);
   const cookieToken = req.cookies?.[CSRF_COOKIE_NAME];
   const hasSessionCookie = Boolean(req.cookies?.[env.SESSION_COOKIE_NAME]);
+  const isBearerWithBrowserOrigin = Boolean(
+    req.headers.authorization?.startsWith('Bearer ') && origin
+  );
 
-  // If a session cookie is present, CSRF token is mandatory
-  if (hasSessionCookie) {
+  // If a session cookie is present, or a Bearer token is submitted from a browser context (indicated by Origin),
+  // a matching CSRF token is mandatory.
+  // Pure non-browser clients (such as mobile apps or CLI tools) sending Bearer tokens without an Origin header
+  // are exempt from CSRF cookie/header token requirements.
+  if (hasSessionCookie || isBearerWithBrowserOrigin) {
     if (!headerToken || !cookieToken || headerToken !== cookieToken) {
       return next(
         new AppError('Invalid or missing CSRF token. Please refresh and try again.', 403, undefined, true)
       );
     }
   } else if (headerToken || cookieToken) {
-    // If client supplied CSRF tokens even without session cookie, verify they match
+    // If client supplied CSRF tokens even without session cookie or browser Bearer, verify they match
     if (headerToken !== cookieToken) {
       return next(new AppError('Invalid CSRF token', 403, undefined, true));
     }
