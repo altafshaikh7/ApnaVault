@@ -1,58 +1,45 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiClient } from '../services/apiClient.js';
 import type { User } from '../types/user.js';
 import type { ApiResponse } from '../types/api.js';
+import { AuthContext } from './authContextValue.js';
 
-interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (
-    name: string,
-    email: string,
-    password: string
-  ) => Promise<{ emailDelivery?: { delivered: boolean; reason?: string } }>;
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+async function initializeAuth(): Promise<User | null> {
+  try {
+    try {
+      const csrfRes = await apiClient.get<ApiResponse<{ csrfToken: string }>>('/auth/csrf-token');
+      if (csrfRes?.data?.csrfToken) {
+        apiClient.setCsrfToken(csrfRes.data.csrfToken);
+      }
+    } catch {
+      // Continue session initialization if the CSRF endpoint is unavailable.
+    }
+
+    const meRes = await apiClient.get<ApiResponse<{ user: User }>>('/auth/me');
+    return meRes?.success && meRes.data?.user ? meRes.data.user : null;
+  } catch {
+    return null;
+  }
 }
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize CSRF token and check current session
-  const initializeAuth = useCallback(async () => {
-    try {
-      // 1. Fetch CSRF token
-      try {
-        const csrfRes = await apiClient.get<ApiResponse<{ csrfToken: string }>>('/auth/csrf-token');
-        if (csrfRes?.data?.csrfToken) {
-          apiClient.setCsrfToken(csrfRes.data.csrfToken);
-        }
-      } catch {
-        // CSRF endpoint error fallback
-      }
-
-      // 2. Fetch current session user
-      const meRes = await apiClient.get<ApiResponse<{ user: User }>>('/auth/me');
-      if (meRes?.success && meRes.data?.user) {
-        setUser(meRes.data.user);
-      } else {
-        setUser(null);
-      }
-    } catch {
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    initializeAuth();
-  }, [initializeAuth]);
+    let isActive = true;
+
+    void initializeAuth().then((initialUser) => {
+      if (isActive) {
+        setUser(initialUser);
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
     const res = await apiClient.post<ApiResponse<{ user: User }>>('/auth/login', {
@@ -119,11 +106,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
-
-export function useAuth(): AuthContextType {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
