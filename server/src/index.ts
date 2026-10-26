@@ -3,6 +3,7 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { DocumentService } from './services/documentService.js';
+import { ReminderService } from './services/reminderService.js';
 
 async function bootstrap(): Promise<void> {
   // Connect to database
@@ -12,6 +13,11 @@ async function bootstrap(): Promise<void> {
     void DocumentService.reconcilePendingDeletions();
   }, 60_000);
   deletionReconciliationTimer.unref();
+
+  const reminderCheckTimer = setInterval(() => {
+    void ReminderService.checkAndGenerateReminders();
+  }, 60_000);
+  reminderCheckTimer.unref();
 
   const server = createServer(app);
 
@@ -23,6 +29,7 @@ async function bootstrap(): Promise<void> {
   const handleShutdown = async (signal: string) => {
     console.log(`\n[Server] Received ${signal}. Initiating graceful shutdown...`);
     clearInterval(deletionReconciliationTimer);
+    clearInterval(reminderCheckTimer);
 
     server.close(async () => {
       console.log('[Server] HTTP server closed');
@@ -51,7 +58,4 @@ async function bootstrap(): Promise<void> {
   });
 }
 
-bootstrap().catch((error) => {
-  console.error('[Bootstrap] Startup failed:', error);
-  process.exit(1);
-});
+void bootstrap();
