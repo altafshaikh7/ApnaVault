@@ -31,6 +31,7 @@ const metadataSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(50)).max(30).default([]),
   issueDate: z.string().optional(),
   expiryDate: z.string().optional(),
+  folderId: z.string().nullable().optional(),
 });
 
 export interface DocumentMetadata {
@@ -40,6 +41,15 @@ export interface DocumentMetadata {
   tags?: string[];
   issueDate?: string;
   expiryDate?: string;
+  folderId?: string | null;
+}
+
+export interface DocumentListOptions {
+  search?: string;
+  category?: string;
+  folderId?: string | null;
+  isArchived?: boolean;
+  sortBy?: string;
 }
 
 function parseDate(value: string | undefined, fieldName: string): Date | undefined {
@@ -62,10 +72,14 @@ function parseMetadata(raw: Record<string, unknown>): z.infer<typeof metadataSch
   }
   const parsed = metadataSchema.safeParse({ ...raw, tags });
   if (!parsed.success) {
-    throw new AppError('Invalid document details', 400, parsed.error.issues.map((issue) => ({
-      field: issue.path.join('.'),
-      message: issue.message,
-    })));
+    throw new AppError(
+      'Invalid document details',
+      400,
+      parsed.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }))
+    );
   }
   return parsed.data;
 }
@@ -80,7 +94,11 @@ async function releaseQuota(ownerId: Types.ObjectId, fileSize: number): Promise<
   }
 }
 
-async function cleanupUpload(ownerId: Types.ObjectId, fileSize: number, storageKey?: string): Promise<void> {
+async function cleanupUpload(
+  ownerId: Types.ObjectId,
+  fileSize: number,
+  storageKey?: string
+): Promise<void> {
   let storageRemoved = !storageKey;
   if (storageKey) {
     try {
@@ -148,6 +166,13 @@ export class DocumentService {
     const expiryDate = parseDate(metadata.expiryDate, 'expiry date');
     await assertPrivateBucketAvailable();
 
+    let targetFolderId: Types.ObjectId | null = null;
+    if (metadata.folderId && metadata.folderId !== 'root') {
+      if (Types.ObjectId.isValid(metadata.folderId)) {
+        targetFolderId = new Types.ObjectId(metadata.folderId);
+      }
+    }
+
     const reservation = await User.findOneAndUpdate(
       {
         _id: ownerId,
@@ -187,6 +212,7 @@ export class DocumentService {
         description: metadata.description,
         tags: metadata.tags,
         ownerId,
+        folderId: targetFolderId,
         isPersonal: true,
         storageKey,
         originalFileName: sanitizeOriginalFilename(file.originalname),
@@ -203,11 +229,54 @@ export class DocumentService {
     }
   }
 
-  public static async list(ownerId: Types.ObjectId): Promise<IDocument[]> {
+  public static async list(
+    ownerId: Types.ObjectId,
+    options: DocumentListOptions = {}
+  ): Promise<IDocument[]> {
     assertStorageConfigured();
-    return DocumentModel.find({ ownerId, isPersonal: true, isDeleted: false })
-      .sort({ createdAt: -1 })
-      .exec();
+    const filter: Record<string, any> = {
+      ownerId,
+      isPersonal: true,
+      isDeleted: false,
+    };
+
+    if (options.isArchived !== undefined) {
+      filter.isArchived = options.isArchived;
+    } else {
+      filter.isArchived = false;
+    }
+
+    if (options.category && options.category !== 'all') {
+      filter.category = options.category;
+    }
+
+    // Folder filtering:
+    if (options.folderId !== undefined && options.folderId !== 'all') {
+      if (options.folderId === 'root' || options.folderId === null || options.folderId === '') {
+        filter.folderId = null;
+      } else if (Types.ObjectId.isValid(options.folderId)) {
+        filter.folderId = new Types.ObjectId(options.folderId);
+      }
+    }
+
+    // Case-insensitive search across title, originalFileName, description, tags
+    if (options.search && options.search.trim()) {
+      const sanitized = options.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(sanitized, 'i');
+      filter.$or = [
+        { title: searchRegex },
+        { originalFileName: searchRegex },
+        { description: searchRegex },
+        { tags: searchRegex },
+      ];
+    }
+
+    let sort: Record<string, 1 | -1> = { createdAt: -1 };
+    if (options.sortBy === 'name_asc') sort = { title: 1 };
+    else if (options.sortBy === 'name_desc') sort = { title: -1 };
+    else if (options.sortBy === 'expiry_asc') sort = { expiryDate: 1 };
+
+    return DocumentModel.find(filter).sort(sort).exec();
   }
 
   public static async get(ownerId: Types.ObjectId, id: string): Promise<IDocument> {
@@ -222,6 +291,123 @@ export class DocumentService {
       isDeleted: false,
     });
     if (!document) throw new AppError('Document not found', 404);
+    return document;
+  }
+
+  public static async getStats(ownerId: Types.ObjectId) {
+    assertStorageConfigured();
+    const baseFilter = { ownerId, isPersonal: true, isDeleted: false, isArchived: false };
+    const totalDocuments = await DocumentModel.countDocuments(baseFilter);
+
+    const now = new Date();
+    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const expiringSoon = await DocumentModel.countDocuments({
+      ...baseFilter,
+      expiryDate: { $gt: now, $lte: in30Days },
+    });
+
+    const expired = await DocumentModel.countDocuments({
+      ...baseFilter,
+      expiryDate: { $lte: now },
+    });
+
+    const recentDocuments = await DocumentModel.find(baseFilter)
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .exec();
+
+    const upcomingExpirations = await DocumentModel.find({
+      ...baseFilter,
+      expiryDate: { $exists: true, $ne: null },
+    })
+      .sort({ expiryDate: 1 })
+      .limit(5)
+      .exec();
+
+    let activeReminders = 0;
+    try {
+      const { Reminder } = await import('../models/Reminder.js');
+      activeReminders = await Reminder.countDocuments({
+        userId: ownerId,
+        status: 'active',
+      });
+    } catch {
+      // Fallback
+      activeReminders = expiringSoon;
+    }
+
+    let familyMembersCount = 1;
+    try {
+      const { Workspace } = await import('../models/Workspace.js');
+      const { WorkspaceMember } = await import('../models/WorkspaceMember.js');
+      let workspace = await Workspace.findOne({ ownerId, isArchived: false });
+      if (!workspace) {
+        const member = await WorkspaceMember.findOne({ userId: ownerId });
+        if (member) {
+          workspace = await Workspace.findById(member.workspaceId);
+        }
+      }
+      if (workspace) {
+        familyMembersCount = await WorkspaceMember.countDocuments({ workspaceId: workspace._id });
+      }
+    } catch {
+      familyMembersCount = 1;
+    }
+
+    const user = await User.findById(ownerId).select('storageUsedBytes storageQuotaBytes');
+
+    return {
+      totalDocuments,
+      expiringSoon,
+      expired,
+      activeReminders: activeReminders || expiringSoon,
+      familyMembersCount,
+      storageUsedBytes: user?.storageUsedBytes || 0,
+      storageQuotaBytes: user?.storageQuotaBytes || env.APP_STORAGE_QUOTA_BYTES,
+      recentDocuments,
+      upcomingExpirations,
+    };
+  }
+
+  public static async getPreview(ownerId: Types.ObjectId, id: string) {
+    const document = await this.get(ownerId, id);
+    const signedUrl = await getSignedDownloadUrl(document.storageKey, 120);
+
+    const isPdf = document.mimeType === 'application/pdf';
+    const isImage = document.mimeType.startsWith('image/');
+    const isPreviewable = isPdf || isImage;
+
+    return {
+      url: signedUrl,
+      expiresIn: 120,
+      fileName: document.originalFileName,
+      mimeType: document.mimeType,
+      fileSize: document.fileSize,
+      isPreviewable,
+    };
+  }
+
+  public static async move(
+    ownerId: Types.ObjectId,
+    id: string,
+    folderId: string | null
+  ): Promise<IDocument> {
+    const document = await this.get(ownerId, id);
+    let targetFolderId: Types.ObjectId | null = null;
+
+    if (folderId && folderId !== 'root') {
+      if (!Types.ObjectId.isValid(folderId)) {
+        throw new AppError('Invalid target folder ID', 400);
+      }
+      const { Folder } = await import('../models/Folder.js');
+      const folder = await Folder.findOne({ _id: folderId, isDeleted: false });
+      if (!folder) throw new AppError('Target folder not found', 404);
+      targetFolderId = folder._id as Types.ObjectId;
+    }
+
+    document.folderId = targetFolderId;
+    await document.save();
     return document;
   }
 
