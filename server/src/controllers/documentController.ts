@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { sendSuccess } from '../utils/apiResponse.js';
 import { AppError } from '../utils/AppError.js';
 import { DocumentService } from '../services/documentService.js';
+import { SIGNED_URL_EXPIRY_SECONDS } from '../services/storageService.js';
 import type { IDocument } from '../models/Document.js';
 
 function getOwnerId(req: Request): Types.ObjectId {
@@ -29,7 +30,7 @@ function toDocumentDto(document: IDocument) {
     fileChecksum: document.fileChecksum,
     issueDate: document.issueDate?.toISOString(),
     expiryDate: document.expiryDate?.toISOString(),
-    ownerId: document.ownerId.toString(),
+
     isArchived: document.isArchived,
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
@@ -68,7 +69,7 @@ export class DocumentController {
   public static async download(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const url = await DocumentService.getDownloadUrl(getOwnerId(req), getDocumentId(req));
-      sendSuccess(res, { url, expiresIn: 60 }, 'Temporary download link created');
+      sendSuccess(res, { url, expiresIn: SIGNED_URL_EXPIRY_SECONDS }, 'Temporary download link created');
     } catch (error) {
       next(error);
     }
