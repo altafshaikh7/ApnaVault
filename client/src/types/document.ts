@@ -32,9 +32,42 @@ export interface DocumentItem {
   expiryDate?: string;
   renewalDate?: string;
   workspaceId?: string;
+  folderId?: string | null;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export type DocumentSortOption = 'recent' | 'name_asc' | 'name_desc' | 'expiry_asc';
+
+export interface DocumentStats {
+  totalDocuments: number;
+  expiringSoon: number;
+  expired: number;
+  activeReminders: number;
+  familyMembersCount?: number;
+  storageUsedBytes: number;
+  storageQuotaBytes: number;
+  recentDocuments: DocumentItem[];
+  upcomingExpirations: DocumentItem[];
+}
+
+export interface DocumentPreview {
+  url: string;
+  expiresIn: number;
+  fileName: string;
+  mimeType: string;
+  fileSize?: number;
+  isPreviewable: boolean;
+}
+
+export interface FolderItem {
+  id: string;
+  name: string;
+  workspaceId: string;
+  ownerId: string;
+  parentId: string | null;
+  documentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
