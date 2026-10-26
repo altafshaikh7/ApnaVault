@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   UploadCloud,
   FileText,
@@ -7,21 +7,27 @@ import {
   AlertCircle,
   Lock,
   Tag,
+  Folder as FolderIcon,
 } from 'lucide-react';
-import { DOCUMENT_CATEGORIES, type DocumentCategory } from '../types/document.js';
+import { DOCUMENT_CATEGORIES, type DocumentCategory, type FolderItem } from '../types/document.js';
 import { Input } from '../components/common/Input.js';
 import { Button } from '../components/common/Button.js';
 import { Card, CardTitle, CardDescription } from '../components/common/Card.js';
-import { uploadDocument } from '../services/documentApi.js';
+import { uploadDocument, listFolders } from '../services/documentApi.js';
 import { ApiException } from '../types/api.js';
 
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<DocumentCategory>('identity');
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(
+    searchParams.get('folderId') || ''
+  );
+  const [availableFolders, setAvailableFolders] = useState<FolderItem[]>([]);
   const [description, setDescription] = useState('');
   const [issueDate, setIssueDate] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
@@ -29,6 +35,13 @@ export const UploadPage: React.FC = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listFolders().then(
+      (folders) => setAvailableFolders(folders),
+      () => setAvailableFolders([])
+    );
+  }, []);
 
   const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
   const maxSizeBytes = 10 * 1024 * 1024;
@@ -117,6 +130,7 @@ export const UploadPage: React.FC = () => {
         tags,
         issueDate,
         expiryDate,
+        folderId: selectedFolderId || undefined,
       });
       navigate(`/documents/${document.id}`);
     } catch (err: unknown) {
@@ -230,6 +244,25 @@ export const UploadPage: React.FC = () => {
               {DOCUMENT_CATEGORIES.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.label} — {cat.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <FolderIcon className="w-3.5 h-3.5 text-slate-500" />
+              Folder (Optional)
+            </label>
+            <select
+              value={selectedFolderId}
+              onChange={(e) => setSelectedFolderId(e.target.value)}
+              className="block w-full rounded-lg border border-slate-300 py-2 px-3 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+              <option value="">No Folder (Root Library)</option>
+              {availableFolders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  📁 {f.name}
                 </option>
               ))}
             </select>
