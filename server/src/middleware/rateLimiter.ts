@@ -1,9 +1,15 @@
 import rateLimit from 'express-rate-limit';
 import { env } from '../config/env.js';
 
+/**
+ * Helper to identify whether code is running inside the automated Vitest test runner (Finding F-07).
+ * Prevents accidental rate limiter bypass if NODE_ENV is set to 'test' in non-test or staging deployments.
+ */
+export const isVitestEnv = (): boolean => process.env.VITEST === 'true';
+
 export const standardRateLimiter = rateLimit({
   windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: env.NODE_ENV === 'test' ? 10000 : env.RATE_LIMIT_MAX_REQUESTS,
+  max: isVitestEnv() ? 10000 : env.RATE_LIMIT_MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -13,12 +19,12 @@ export const standardRateLimiter = rateLimit({
       code: 'RATE_LIMIT_EXCEEDED',
     },
   },
-  skip: () => env.NODE_ENV === 'test',
+  skip: () => isVitestEnv(),
 });
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: env.NODE_ENV === 'test' ? 1000 : env.AUTH_RATE_LIMIT_MAX,
+  max: isVitestEnv() ? 1000 : env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -28,12 +34,12 @@ export const authLimiter = rateLimit({
       code: 'AUTH_RATE_LIMIT_EXCEEDED',
     },
   },
-  skip: () => env.NODE_ENV === 'test',
+  skip: () => isVitestEnv(),
 });
 
 export const passwordResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: env.NODE_ENV === 'test' ? 1000 : env.RESET_RATE_LIMIT_MAX,
+  max: isVitestEnv() ? 1000 : env.RESET_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -43,12 +49,12 @@ export const passwordResetLimiter = rateLimit({
       code: 'RESET_RATE_LIMIT_EXCEEDED',
     },
   },
-  skip: () => env.NODE_ENV === 'test',
+  skip: () => isVitestEnv(),
 });
 
 export const verificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: env.NODE_ENV === 'test' ? 1000 : env.RESET_RATE_LIMIT_MAX,
+  max: isVitestEnv() ? 1000 : env.RESET_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -58,5 +64,5 @@ export const verificationLimiter = rateLimit({
       code: 'VERIFICATION_RATE_LIMIT_EXCEEDED',
     },
   },
-  skip: () => env.NODE_ENV === 'test',
+  skip: () => isVitestEnv(),
 });
