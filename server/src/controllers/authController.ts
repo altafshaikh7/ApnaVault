@@ -5,6 +5,8 @@ import { setSessionCookie, clearSessionCookie } from '../middleware/authMiddlewa
 import { generateCsrfToken, setCsrfCookie } from '../middleware/csrf.js';
 
 export class AuthController {
+  // Existing methods ... (kept unchanged)
+
   public static getCsrfToken(_req: Request, res: Response): void {
     const token = generateCsrfToken();
     setCsrfCookie(res, token);
@@ -85,6 +87,23 @@ export class AuthController {
   public static async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       sendSuccess(res, { user: req.user }, 'Current session profile', 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Update authenticated user's own profile (name, phone, timezone)
+  public static async updateMe(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user!._id;
+      const updates = req.body as Partial<{ name: string; phone?: string; timezone?: string }>;
+      const { User } = await import('../models/User.js');
+      const updatedUser = await User.findByIdAndUpdate(userId, { $set: updates }, { new: true, runValidators: true }).exec();
+      if (!updatedUser) {
+        const { AppError } = await import('../utils/AppError.js');
+        return next(new AppError('User not found', 404, undefined, true));
+      }
+      sendSuccess(res, { user: updatedUser }, 'Profile updated', 200);
     } catch (error) {
       next(error);
     }
