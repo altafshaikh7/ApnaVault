@@ -103,10 +103,10 @@ export class AuthController {
   public static async resendVerification(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email } = req.body;
-      const result = await AuthService.resendVerification(email);
+      await AuthService.resendVerification(email);
       sendSuccess(
         res,
-        { emailDelivery: result },
+        null,
         'If an unverified account exists, verification instructions have been dispatched',
         200
       );
