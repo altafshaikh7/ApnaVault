@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Mail, ArrowLeft, RefreshCw } from 'lucide-react';
 import { AuthLayout } from '../layouts/AuthLayout.js';
@@ -6,7 +6,7 @@ import { Input } from '../components/common/Input.js';
 import { Button } from '../components/common/Button.js';
 import { apiClient } from '../services/apiClient.js';
 import { ApiException } from '../types/api.js';
-import { useAuth } from '../context/AuthContext.js';
+import { useAuth } from '../hooks/useAuth.js';
 
 export const VerifyEmailPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -22,16 +22,14 @@ export const VerifyEmailPage: React.FC = () => {
   const [resendEmail, setResendEmail] = useState('');
   const [isResending, setIsResending] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const autoVerificationTokens = useRef(new Set<string>());
+  const inFlightTokens = useRef(new Set<string>());
 
-  useEffect(() => {
-    if (tokenFromUrl) {
-      handleVerify(tokenFromUrl);
-    }
-  }, [tokenFromUrl]);
-
-  const handleVerify = async (tokenToVerify: string) => {
+  const handleVerify = useCallback(async (tokenToVerify: string) => {
     if (!tokenToVerify) return;
+    if (inFlightTokens.current.has(tokenToVerify)) return;
 
+    inFlightTokens.current.add(tokenToVerify);
     setIsVerifying(true);
     setError(null);
 
@@ -46,9 +44,17 @@ export const VerifyEmailPage: React.FC = () => {
         setError('Verification failed. The link may have expired or already been used.');
       }
     } finally {
+      inFlightTokens.current.delete(tokenToVerify);
       setIsVerifying(false);
     }
-  };
+  }, [refreshUser]);
+
+  useEffect(() => {
+    if (tokenFromUrl && !autoVerificationTokens.current.has(tokenFromUrl)) {
+      autoVerificationTokens.current.add(tokenFromUrl);
+      void handleVerify(tokenFromUrl);
+    }
+  }, [handleVerify, tokenFromUrl]);
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
