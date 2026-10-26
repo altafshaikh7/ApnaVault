@@ -7,4 +7,5 @@ export * from './DocumentPermission.js';
 export * from './Invitation.js';
 export * from './Reminder.js';
 export * from './Notification.js';
+export * from './Folder.js';
 export * from './AuditLog.js';
