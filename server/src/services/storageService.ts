@@ -69,7 +69,12 @@ export async function uploadToStorage(
   return storageKey;
 }
 
-export async function getSignedDownloadUrl(storageKey: string, expiresIn = 60): Promise<string> {
+export const SIGNED_URL_EXPIRY_SECONDS = 60;
+
+export async function getSignedDownloadUrl(
+  storageKey: string,
+  expiresIn = SIGNED_URL_EXPIRY_SECONDS
+): Promise<string> {
   await ensureBucket();
   try {
     const { data, error } = await getSupabaseClient()
