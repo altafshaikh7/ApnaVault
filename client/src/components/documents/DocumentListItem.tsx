@@ -1,18 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Calendar, MoreVertical, ExternalLink } from 'lucide-react';
+import { FileText, Calendar, MoreVertical, ExternalLink, Eye, FolderInput } from 'lucide-react';
 import type { DocumentItem } from '../../types/document.js';
 import { CategoryBadge } from '../common/Badge.js';
 import { Dropdown } from '../common/Dropdown.js';
 
 export interface DocumentListItemProps {
   document: DocumentItem;
+  onPreview?: (doc: DocumentItem) => void;
+  onMove?: (doc: DocumentItem) => void;
   onArchive?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
 
 export const DocumentListItem: React.FC<DocumentListItemProps> = ({
   document,
+  onPreview,
+  onMove,
   onArchive,
   onDelete,
 }) => {
@@ -54,46 +58,79 @@ export const DocumentListItem: React.FC<DocumentListItemProps> = ({
         )}
       </td>
       <td className="py-3 px-4 text-right">
-        <Dropdown
-          trigger={
+        <div className="flex items-center justify-end gap-1">
+          {onPreview && (
             <button
-              className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100"
-              aria-label="Options"
+              onClick={() => onPreview(document)}
+              className="text-slate-400 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
+              title="Preview Document"
+              aria-label="Preview document"
             >
-              <MoreVertical className="w-4 h-4" />
+              <Eye className="w-4 h-4" />
             </button>
-          }
-          items={[
-            {
-              id: 'details',
-              label: 'View Details',
-              icon: <ExternalLink className="w-4 h-4" />,
-              onClick: () => {
-                window.location.href = `/documents/${document.id}`;
+          )}
+
+          <Dropdown
+            trigger={
+              <button
+                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100"
+                aria-label="Options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+            }
+            items={[
+              ...(onPreview
+                ? [
+                    {
+                      id: 'preview',
+                      label: 'Preview File',
+                      icon: <Eye className="w-4 h-4" />,
+                      onClick: () => onPreview(document),
+                    },
+                  ]
+                : []),
+              {
+                id: 'details',
+                label: 'View Details',
+                icon: <ExternalLink className="w-4 h-4" />,
+                onClick: () => {
+                  window.location.href = `/documents/${document.id}`;
+                },
               },
-            },
-            ...(onArchive
-              ? [
-                  {
-                    id: 'archive',
-                    label: document.isArchived ? 'Restore' : 'Archive',
-                    onClick: () => onArchive(document.id),
-                  },
-                ]
-              : []),
-            ...(onDelete
-              ? [
-                  'divider' as const,
-                  {
-                    id: 'delete',
-                    label: 'Delete',
-                    danger: true,
-                    onClick: () => onDelete(document.id),
-                  },
-                ]
-              : []),
-          ]}
-        />
+              ...(onMove
+                ? [
+                    {
+                      id: 'move',
+                      label: 'Move to Folder',
+                      icon: <FolderInput className="w-4 h-4" />,
+                      onClick: () => onMove(document),
+                    },
+                  ]
+                : []),
+              ...(onArchive
+                ? [
+                    {
+                      id: 'archive',
+                      label: document.isArchived ? 'Restore' : 'Archive',
+                      onClick: () => onArchive(document.id),
+                    },
+                  ]
+                : []),
+              ...(onDelete
+                ? [
+                    'divider' as const,
+                    {
+                      id: 'delete',
+                      label: 'Delete',
+                      danger: true,
+                      onClick: () => onDelete(document.id),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </div>
       </td>
     </tr>
   );
