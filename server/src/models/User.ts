@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document as MongooseDocument } from 'mongoose';
+import { env } from '../config/env.js';
 
 export interface IUser extends MongooseDocument {
   email: string;
@@ -19,79 +20,41 @@ export interface IUser extends MongooseDocument {
   updatedAt: Date;
 }
 
-const userSchema = new Schema<IUser>(
-  {
-    email: {
-      type: String,
-      required: [true, 'Email address is required'],
-      unique: true,
-      trim: true,
-      lowercase: true,
-      match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
-      index: true,
-    },
-    passwordHash: {
-      type: String,
-      required: [true, 'Password hash is required'],
-      select: false, // Do not return passwordHash in standard queries
-    },
-    name: {
-      type: String,
-      required: [true, 'Name is required'],
-      trim: true,
-      maxlength: [100, 'Name cannot exceed 100 characters'],
-    },
-    phone: {
-      type: String,
-      trim: true,
-    },
-    isEmailVerified: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    emailVerificationToken: {
-      type: String,
-      index: true,
-      select: false,
-    },
-    emailVerificationExpiresAt: {
-      type: Date,
-    },
-    passwordResetToken: {
-      type: String,
-      index: true,
-      select: false,
-    },
-    passwordResetExpiresAt: {
-      type: Date,
-    },
-    timezone: {
-      type: String,
-      default: 'Asia/Kolkata',
-    },
-    storageUsedBytes: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    storageQuotaBytes: {
-      type: Number,
-      default: 5 * 1024 * 1024 * 1024, // 5 GB default quota
-    },
-    isDeleted: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    deletedAt: {
-      type: Date,
-    },
+const userSchema = new Schema<IUser>({
+  email: {
+    type: String,
+    required: [true, 'Email address is required'],
+    unique: true,
+    trim: true,
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
+    index: true,
   },
-  {
-    timestamps: true,
-  }
-);
+  passwordHash: {
+    type: String,
+    required: [true, 'Password hash is required'],
+    select: false, // Do not return passwordHash in standard queries
+  },
+  name: {
+    type: String,
+    required: [true, 'Name is required'],
+    trim: true,
+    maxlength: [100, 'Name cannot exceed 100 characters'],
+  },
+  phone: { type: String, trim: true },
+  isEmailVerified: { type: Boolean, default: false, index: true },
+  emailVerificationToken: { type: String, index: true, select: false },
+  emailVerificationExpiresAt: { type: Date },
+  passwordResetToken: { type: String, index: true, select: false },
+  passwordResetExpiresAt: { type: Date },
+  timezone: { type: String, default: 'Asia/Kolkata' },
+  storageUsedBytes: { type: Number, default: 0, min: 0 },
+  storageQuotaBytes: { type: Number, default: env.APP_STORAGE_QUOTA_BYTES },
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date },
+}, {
+  timestamps: true,
+});
 
 // Method to safely strip sensitive fields when converting to JSON
 userSchema.set('toJSON', {
