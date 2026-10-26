@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Calendar, Tag, MoreVertical, ExternalLink } from 'lucide-react';
+import { FileText, Calendar, Tag, MoreVertical, ExternalLink, Eye, FolderInput } from 'lucide-react';
 import type { DocumentItem } from '../../types/document.js';
 import { CategoryBadge } from '../common/Badge.js';
 import { Dropdown } from '../common/Dropdown.js';
 
 export interface DocumentCardProps {
   document: DocumentItem;
+  onPreview?: (doc: DocumentItem) => void;
+  onMove?: (doc: DocumentItem) => void;
   onArchive?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
 
 export const DocumentCard: React.FC<DocumentCardProps> = ({
   document,
+  onPreview,
+  onMove,
   onArchive,
   onDelete,
 }) => {
@@ -53,58 +57,91 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
         <div className="flex items-start justify-between gap-3 mb-3">
           <CategoryBadge category={document.category} />
 
-          <Dropdown
-            trigger={
+          <div className="flex items-center gap-1">
+            {onPreview && (
               <button
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors"
-                aria-label="Document options"
+                onClick={() => onPreview(document)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-md hover:bg-slate-100 transition-colors"
+                title="Preview Document"
+                aria-label="Preview document"
               >
-                <MoreVertical className="w-4 h-4" />
+                <Eye className="w-4 h-4" />
               </button>
-            }
-            items={[
-              {
-                id: 'details',
-                label: 'View Details',
-                icon: <ExternalLink className="w-4 h-4" />,
-                onClick: () => {
-                  window.location.href = `/documents/${document.id}`;
+            )}
+
+            <Dropdown
+              trigger={
+                <button
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors"
+                  aria-label="Document options"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              }
+              items={[
+                ...(onPreview
+                  ? [
+                      {
+                        id: 'preview',
+                        label: 'Preview File',
+                        icon: <Eye className="w-4 h-4" />,
+                        onClick: () => onPreview(document),
+                      },
+                    ]
+                  : []),
+                {
+                  id: 'details',
+                  label: 'View Details',
+                  icon: <ExternalLink className="w-4 h-4" />,
+                  onClick: () => {
+                    window.location.href = `/documents/${document.id}`;
+                  },
                 },
-              },
-              ...(onArchive
-                ? [
-                    {
-                      id: 'archive',
-                      label: document.isArchived ? 'Restore' : 'Archive',
-                      onClick: () => onArchive(document.id),
-                    },
-                  ]
-                : []),
-              ...(onDelete
-                ? [
-                    'divider' as const,
-                    {
-                      id: 'delete',
-                      label: 'Delete',
-                      danger: true,
-                      onClick: () => onDelete(document.id),
-                    },
-                  ]
-                : []),
-            ]}
-          />
+                ...(onMove
+                  ? [
+                      {
+                        id: 'move',
+                        label: 'Move to Folder',
+                        icon: <FolderInput className="w-4 h-4" />,
+                        onClick: () => onMove(document),
+                      },
+                    ]
+                  : []),
+                ...(onArchive
+                  ? [
+                      {
+                        id: 'archive',
+                        label: document.isArchived ? 'Restore' : 'Archive',
+                        onClick: () => onArchive(document.id),
+                      },
+                    ]
+                  : []),
+                ...(onDelete
+                  ? [
+                      'divider' as const,
+                      {
+                        id: 'delete',
+                        label: 'Delete',
+                        danger: true,
+                        onClick: () => onDelete(document.id),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </div>
         </div>
 
         <Link to={`/documents/${document.id}`} className="block group-hover:text-slate-900">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 shrink-0 group-hover:bg-slate-100 transition-colors">
-              <FileText className="w-5 h-5 text-slate-600" />
+              <FileText className="w-5 h-5 text-slate-700" />
             </div>
-            <div className="min-w-0 flex-1">
-              <h4 className="text-sm font-semibold text-slate-900 truncate tracking-tight">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-slate-900 tracking-tight truncate group-hover:text-emerald-700 transition-colors">
                 {document.title}
-              </h4>
-              <p className="text-[11px] text-slate-500 truncate mt-0.5">{document.fileName}</p>
+              </h3>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5">{document.fileName}</p>
             </div>
           </div>
         </Link>
