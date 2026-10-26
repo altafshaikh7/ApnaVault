@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   UserPlus,
   ShieldCheck,
@@ -6,30 +6,171 @@ import {
   Crown,
   Clock,
   Info,
+  CheckCircle2,
+  AlertCircle,
+  Check,
+  X,
+  Trash2,
+  UserMinus,
 } from 'lucide-react';
 import { Button } from '../components/common/Button.js';
 import { Card, CardTitle, CardDescription } from '../components/common/Card.js';
 import { Modal } from '../components/common/Modal.js';
 import { Input } from '../components/common/Input.js';
 import { EmptyState } from '../components/common/EmptyState.js';
-import type { WorkspaceRole } from '../types/workspace.js';
+import { AuthContext } from '../context/authContextValue.js';
+import { apiClient } from '../services/apiClient.js';
+import { notifyNotificationsChanged } from '../services/notificationApi.js';
+import type { WorkspaceRole, WorkspaceMember, WorkspaceInvitation, Workspace } from '../types/workspace.js';
 
 export const FamilyPage: React.FC = () => {
+  const auth = useContext(AuthContext);
+  const currentUser = auth?.user;
+
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [sentInvitations, setSentInvitations] = useState<WorkspaceInvitation[]>([]);
+  const [myInvitations, setMyInvitations] = useState<WorkspaceInvitation[]>([]);
+
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>('member');
-  const [inviteSentNotice, setInviteSentNotice] = useState<string | null>(null);
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
-  const handleInviteSubmit = (e: React.FormEvent) => {
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setActionError(null);
+    try {
+      const [workspaceRes, sentRes, myRes] = await Promise.allSettled([
+        apiClient.get<{ success: boolean; data: { workspace: Workspace; members: WorkspaceMember[] } }>(
+          '/invitations/workspace'
+        ),
+        apiClient.get<{ success: boolean; data: { invitations: WorkspaceInvitation[] } }>(
+          '/invitations/sent'
+        ),
+        apiClient.get<{ success: boolean; data: { invitations: WorkspaceInvitation[] } }>(
+          '/invitations/mine'
+        ),
+      ]);
+
+      if (workspaceRes.status === 'fulfilled' && workspaceRes.value?.data) {
+        setWorkspace(workspaceRes.value.data.workspace);
+        setMembers(workspaceRes.value.data.members || []);
+      }
+
+      if (sentRes.status === 'fulfilled' && sentRes.value?.data?.invitations) {
+        setSentInvitations(sentRes.value.data.invitations);
+      }
+
+      if (myRes.status === 'fulfilled' && myRes.value?.data?.invitations) {
+        setMyInvitations(myRes.value.data.invitations);
+      }
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to load workspace data');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail) return;
+    if (!inviteEmail.trim()) return;
 
-    // In Phase 2: UI workflow verification
-    // Phase 7 will wire actual email invitation delivery
-    setInviteSentNotice(`Invitation ready for ${inviteEmail} as ${inviteRole}.`);
-    setInviteEmail('');
-    setIsInviteModalOpen(false);
+    setIsInviting(true);
+    setInviteError(null);
+
+    try {
+      await apiClient.post('/invitations', {
+        email: inviteEmail.trim(),
+        role: inviteRole,
+      });
+
+      setActionNotice(`Invitation sent successfully to ${inviteEmail} as ${inviteRole}.`);
+      setInviteEmail('');
+      setIsInviteModalOpen(false);
+
+      // Refresh sent invitations
+      const sentRes = await apiClient.get<{ success: boolean; data: { invitations: WorkspaceInvitation[] } }>(
+        '/invitations/sent'
+      );
+      if (sentRes?.data?.invitations) {
+        setSentInvitations(sentRes.data.invitations);
+      }
+    } catch (err: any) {
+      setInviteError(err?.message || 'Failed to send invitation');
+    } finally {
+      setIsInviting(false);
+    }
   };
+
+  const handleRespond = async (invitationId: string, action: 'accept' | 'decline') => {
+    setProcessingId(invitationId);
+    setActionNotice(null);
+    setActionError(null);
+
+    try {
+      await apiClient.patch(`/invitations/${invitationId}/respond`, { action });
+      setActionNotice(
+        action === 'accept'
+          ? 'Invitation accepted! You have joined the family workspace.'
+          : 'Invitation declined.'
+      );
+      notifyNotificationsChanged();
+      // Reload entire workspace data
+      await loadData();
+    } catch (err: any) {
+      setActionError(err?.message || `Failed to ${action} invitation`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    setProcessingId(invitationId);
+    setActionNotice(null);
+    setActionError(null);
+
+    try {
+      await apiClient.delete(`/invitations/${invitationId}`);
+      setActionNotice('Invitation cancelled.');
+      notifyNotificationsChanged();
+      setSentInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to cancel invitation');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRemoveMember = async (member: WorkspaceMember) => {
+    if (!member.userId) return;
+    const confirmMessage = `Are you sure you want to remove ${member.name} from the workspace? They will lose access to shared family documents.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setProcessingId(member.userId);
+    setActionNotice(null);
+    setActionError(null);
+
+    try {
+      await apiClient.delete(`/invitations/workspace/members/${encodeURIComponent(member.userId)}`);
+      setActionNotice(`Successfully removed ${member.name} from the workspace.`);
+      await loadData();
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to remove member from workspace');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const pendingSentInvitations = sentInvitations.filter(
+    (inv) => inv.status === 'pending'
+  );
 
   return (
     <div className="space-y-6">
@@ -46,23 +187,122 @@ export const FamilyPage: React.FC = () => {
         <Button
           variant="primary"
           size="sm"
-          onClick={() => setIsInviteModalOpen(true)}
+          onClick={() => {
+            setInviteError(null);
+            setIsInviteModalOpen(true);
+          }}
           leftIcon={<UserPlus className="w-4 h-4" />}
         >
           Invite Family Member
         </Button>
       </div>
 
-      {inviteSentNotice && (
+      {actionNotice && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
-          <span>{inviteSentNotice}</span>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{actionNotice}</span>
+          </div>
           <button
-            onClick={() => setInviteSentNotice(null)}
-            className="text-emerald-600 hover:text-emerald-900 font-bold ml-2"
+            onClick={() => setActionNotice(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold ml-2"
           >
             ✕
           </button>
         </div>
+      )}
+
+      {actionError && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-red-700 hover:text-red-900 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Received Invitations Section */}
+      {myInvitations.length > 0 && (
+        <Card className="p-6 border-emerald-200 bg-emerald-50/20">
+          <CardTitle>Invitations for You</CardTitle>
+          <CardDescription>
+            You have received the following invitations to join family workspaces
+          </CardDescription>
+
+          <div className="mt-4 space-y-3">
+            {myInvitations.map((inv) => {
+              const inviterName =
+                typeof inv.invitedBy === 'object' && inv.invitedBy !== null
+                  ? inv.invitedBy.name || inv.invitedBy.email || 'Family Admin'
+                  : 'Family Admin';
+              const inviterEmail =
+                typeof inv.invitedBy === 'object' && inv.invitedBy !== null
+                  ? inv.invitedBy.email
+                  : '';
+              const workspaceName =
+                typeof inv.workspace === 'object' && inv.workspace !== null
+                  ? inv.workspace.name || 'Family Workspace'
+                  : 'Family Workspace';
+
+              const isProcessing = processingId === inv.id;
+
+              return (
+                <div
+                  key={inv.id}
+                  className="p-4 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        {workspaceName}
+                      </h4>
+                      <span className="text-[10px] font-medium bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 capitalize">
+                        {inv.role}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Invited by <span className="font-medium text-slate-800">{inviterName}</span>
+                      {inviterEmail && <span className="text-slate-400 text-[11px]"> ({inviterEmail})</span>}
+                    </p>
+                    {inv.expiresAt && (
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Expires: {new Date(inv.expiresAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon={<Check className="w-3.5 h-3.5" />}
+                      isLoading={isProcessing}
+                      disabled={isProcessing}
+                      onClick={() => handleRespond(inv.id, 'accept')}
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<X className="w-3.5 h-3.5" />}
+                      disabled={isProcessing}
+                      onClick={() => handleRespond(inv.id, 'decline')}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
       )}
 
       {/* Family Workspace Overview Card */}
@@ -73,13 +313,24 @@ export const FamilyPage: React.FC = () => {
               <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
                 Active Household
               </span>
+              {workspace?.currentUserRole && (
+                <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full capitalize">
+                  Your Role: {workspace.currentUserRole}
+                </span>
+              )}
             </div>
-            <h2 className="text-lg font-bold text-slate-900">Sharma Family Vault</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Primary workspace for shared household records</p>
+            <h2 className="text-lg font-bold text-slate-900">
+              {workspace?.name || 'Sharma Family Vault'}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Primary workspace for shared household records
+            </p>
           </div>
           <div className="text-right">
-            <span className="text-2xl font-bold text-slate-900">1</span>
-            <p className="text-[11px] text-slate-400">Total Member</p>
+            <span className="text-2xl font-bold text-slate-900">
+              {members.length || 1}
+            </span>
+            <p className="text-[11px] text-slate-400">Total Member{members.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
       </Card>
@@ -94,49 +345,147 @@ export const FamilyPage: React.FC = () => {
         </div>
 
         <div className="divide-y divide-slate-100">
-          <div className="p-4 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
-                ME
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-900">You</span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
-                    <Crown className="w-3 h-3 text-amber-600" /> Owner
-                  </span>
+          {members.length > 0 ? (
+            members.map((member) => {
+              const isMe =
+                currentUser &&
+                (member.userId === currentUser.id || member.email === currentUser.email);
+              const initials = member.name
+                ? member.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : 'ME';
+
+              return (
+                <div
+                  key={member.userId || member.email}
+                  className="p-4 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                      {initials}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-900">
+                          {member.name} {isMe && '(You)'}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200 capitalize">
+                          {member.role === 'owner' && <Crown className="w-3 h-3 text-amber-600" />}
+                          {member.role}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400">{member.email}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-slate-600 capitalize">
+                      {member.role === 'owner' ? 'Full Permissions' : `${member.role} Access`}
+                    </span>
+                    {(workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin') &&
+                      member.role !== 'owner' &&
+                      !isMe && (
+                        <button
+                          type="button"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title={`Remove ${member.name} from workspace`}
+                          aria-label={`Remove ${member.name} from workspace`}
+                          disabled={processingId === member.userId}
+                          onClick={() => handleRemoveMember(member)}
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </button>
+                      )}
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-400">Primary account holder</div>
+              );
+            })
+          ) : (
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                  YOU
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-900">You</span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                      <Crown className="w-3 h-3 text-amber-600" /> Owner
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">Primary account holder</div>
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <span className="text-xs font-medium text-slate-600">Full Permissions</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Pending Invitations */}
+      {/* Sent / Pending Invitations */}
       <Card className="p-6">
         <CardTitle>Pending Invitations</CardTitle>
         <CardDescription>Family members who have been invited to join</CardDescription>
 
         <div className="mt-4">
-          <EmptyState
-            icon={<Clock className="w-6 h-6 text-slate-400" />}
-            title="No pending invitations"
-            description="When you invite family members via email, their invitation status will show here."
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsInviteModalOpen(true)}
-                leftIcon={<UserPlus className="w-3.5 h-3.5" />}
-              >
-                Send an Invite
-              </Button>
-            }
-          />
+          {pendingSentInvitations.length === 0 ? (
+            <EmptyState
+              icon={<Clock className="w-6 h-6 text-slate-400" />}
+              title="No pending invitations"
+              description="When you invite family members via email, their invitation status will show here."
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setInviteError(null);
+                    setIsInviteModalOpen(true);
+                  }}
+                  leftIcon={<UserPlus className="w-3.5 h-3.5" />}
+                >
+                  Send an Invite
+                </Button>
+              }
+            />
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+              {pendingSentInvitations.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="p-3.5 flex items-center justify-between text-xs hover:bg-slate-50/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-900 flex items-center gap-2">
+                        <span>{inv.email}</span>
+                        <span className="text-[10px] font-medium bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                          Pending
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5 capitalize">
+                        Role: {inv.role}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-400 hover:text-red-600"
+                    onClick={() => handleCancelInvitation(inv.id)}
+                    isLoading={processingId === inv.id}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -183,16 +532,34 @@ export const FamilyPage: React.FC = () => {
         description="Send an email invitation to join your family workspace"
         footer={
           <>
-            <Button variant="ghost" size="sm" onClick={() => setIsInviteModalOpen(false)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isInviting}
+              onClick={() => setIsInviteModalOpen(false)}
+            >
               Cancel
             </Button>
-            <Button variant="primary" size="sm" onClick={handleInviteSubmit}>
+            <Button
+              variant="primary"
+              size="sm"
+              isLoading={isInviting}
+              disabled={isInviting || !inviteEmail}
+              onClick={handleInviteSubmit}
+            >
               Send Invitation
             </Button>
           </>
         }
       >
         <form onSubmit={handleInviteSubmit} className="space-y-4">
+          {inviteError && (
+            <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{inviteError}</span>
+            </div>
+          )}
+
           <Input
             label="Email Address"
             type="email"
