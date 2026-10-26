@@ -14,6 +14,7 @@ import {
   resendVerificationSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  profileUpdateSchema,
 } from '../validators/authValidators.js';
 
 export const authRouter = Router();
@@ -38,6 +39,7 @@ authRouter.post(
 
 // Session Profile & Logout (Protected)
 authRouter.get('/me', requireAuth, AuthController.getMe);
+authRouter.put('/me', requireAuth, validateRequest({ body: profileUpdateSchema }), AuthController.updateMe);
 authRouter.post('/logout', requireAuth, AuthController.logout);
 
 // Email Verification
