@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.js';
+import { useAuth } from '../../hooks/useAuth.js';
 import { LoadingState } from './LoadingState.js';
 
 export const ProtectedRoute: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
