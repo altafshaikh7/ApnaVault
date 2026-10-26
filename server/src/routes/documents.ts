@@ -32,8 +32,15 @@ function receiveDocument(req: Request, res: Response, next: NextFunction): void 
 }
 
 documentsRouter.use(requireAuth);
+
+// Document collection routes
 documentsRouter.post('/', receiveDocument, DocumentController.upload);
 documentsRouter.get('/', DocumentController.list);
+documentsRouter.get('/stats', DocumentController.stats);
+
+// Single document routes
 documentsRouter.get('/:id/download', DocumentController.download);
+documentsRouter.get('/:id/preview', DocumentController.preview);
+documentsRouter.patch('/:id/move', DocumentController.move);
 documentsRouter.get('/:id', DocumentController.get);
 documentsRouter.delete('/:id', DocumentController.delete);
