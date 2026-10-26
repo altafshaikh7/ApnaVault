@@ -37,7 +37,7 @@ authRouter.post(
 );
 
 // Session Profile & Logout (Protected)
-authRouter.get('/me', AuthController.getMe);
+authRouter.get('/me', requireAuth, AuthController.getMe);
 authRouter.post('/logout', requireAuth, AuthController.logout);
 
 // Email Verification
