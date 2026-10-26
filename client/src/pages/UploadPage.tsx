@@ -5,7 +5,6 @@ import {
   FileText,
   X,
   AlertCircle,
-  CheckCircle2,
   Lock,
   Tag,
 } from 'lucide-react';
@@ -13,6 +12,8 @@ import { DOCUMENT_CATEGORIES, type DocumentCategory } from '../types/document.js
 import { Input } from '../components/common/Input.js';
 import { Button } from '../components/common/Button.js';
 import { Card, CardTitle, CardDescription } from '../components/common/Card.js';
+import { uploadDocument } from '../services/documentApi.js';
+import { ApiException } from '../types/api.js';
 
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
@@ -27,12 +28,10 @@ export const UploadPage: React.FC = () => {
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-  const maxSizeBytes = 25 * 1024 * 1024; // 25 MB
+  const maxSizeBytes = 10 * 1024 * 1024;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -46,8 +45,22 @@ export const UploadPage: React.FC = () => {
       setError('Unsupported file type. Please upload a PDF, JPEG, or PNG file.');
       return;
     }
+    const extension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+    const allowedExtensions = file.type === 'application/pdf'
+      ? ['.pdf']
+      : file.type === 'image/jpeg'
+        ? ['.jpg', '.jpeg']
+        : ['.png'];
+    if (!allowedExtensions.includes(extension)) {
+      setError('File extension does not match its media type.');
+      return;
+    }
+    if (file.size === 0) {
+      setError('The selected file is empty.');
+      return;
+    }
     if (file.size > maxSizeBytes) {
-      setError('File size exceeds the 25 MB limit.');
+      setError('File size exceeds the 10 MiB limit.');
       return;
     }
 
@@ -82,7 +95,7 @@ export const UploadPage: React.FC = () => {
     setTags(tags.filter((t) => t !== tagToRemove));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) {
       setError('Please select a file to upload.');
@@ -94,24 +107,23 @@ export const UploadPage: React.FC = () => {
     }
 
     setIsUploading(true);
-    setUploadProgress(20);
     setError(null);
-
-    // In Phase 2: Show interactive progress simulation for UI verification
-    // Phase 5 will implement actual S3 multipart / presigned upload.
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsUploading(false);
-          setNotice(
-            'Upload UI verified. Note: Document storage backend integration will be activated in Phase 5.'
-          );
-          return 100;
-        }
-        return prev + 30;
+    try {
+      const document = await uploadDocument({
+        file: selectedFile,
+        title: title.trim(),
+        category,
+        description,
+        tags,
+        issueDate,
+        expiryDate,
       });
-    }, 250);
+      navigate(`/documents/${document.id}`);
+    } catch (err: unknown) {
+      setError(err instanceof ApiException ? err.message : 'Document upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -132,26 +144,11 @@ export const UploadPage: React.FC = () => {
         </div>
       )}
 
-      {notice && (
-        <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200 flex items-start gap-2.5 text-xs text-sky-800">
-          <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <span className="font-semibold">Notice: </span>
-            {notice}
-            <div className="mt-2">
-              <Button variant="outline" size="sm" onClick={() => navigate('/documents')}>
-                Return to Documents
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Dropzone */}
         <Card className="p-6">
           <CardTitle>Select File</CardTitle>
-          <CardDescription>Supported formats: PDF, JPEG, PNG (up to 25 MB)</CardDescription>
+          <CardDescription>Supported formats: PDF, JPEG, PNG (up to 10 MiB)</CardDescription>
 
           <input
             type="file"
@@ -174,7 +171,7 @@ export const UploadPage: React.FC = () => {
               <p className="text-xs font-semibold text-slate-800">
                 Click to browse or drag and drop your file here
               </p>
-              <p className="text-[11px] text-slate-400 mt-1">PDF, JPG or PNG up to 25 MB</p>
+              <p className="text-[11px] text-slate-400 mt-1">PDF, JPG or PNG up to 10 MiB</p>
             </div>
           ) : (
             <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
@@ -204,18 +201,7 @@ export const UploadPage: React.FC = () => {
           )}
 
           {isUploading && (
-            <div className="mt-4 space-y-1.5">
-              <div className="flex justify-between text-xs font-medium text-slate-600">
-                <span>Uploading file...</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-slate-900 h-full transition-all duration-200"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            </div>
+            <p className="mt-4 text-xs text-slate-500">Uploading securely...</p>
           )}
         </Card>
 
@@ -326,7 +312,7 @@ export const UploadPage: React.FC = () => {
         <div className="flex items-center justify-between pt-2">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <Lock className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Files are encrypted before storing</span>
+            <span>Private storage with owner-only access</span>
           </div>
 
           <div className="flex items-center gap-3">
