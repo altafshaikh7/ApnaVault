@@ -9,6 +9,8 @@ const optionalSupabaseValue = (schema: z.ZodType<string | undefined>) =>
     schema.optional()
   );
 
+export const DEFAULT_SESSION_SECRET = 'apnavault_default_session_secret_32_characters_long_min';
+
 export const envSchema = z.object({
   // Supabase configuration
   SUPABASE_URL: optionalSupabaseValue(z.string().url()),
@@ -31,7 +33,7 @@ export const envSchema = z.object({
   RESET_RATE_LIMIT_MAX: z.coerce.number().default(5), // 5 attempts per 15 min for password reset/verification
 
   // Session & Security
-  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters long').default('apnavault_default_session_secret_32_characters_long_min'),
+  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters long').default(DEFAULT_SESSION_SECRET),
   SESSION_COOKIE_NAME: z.string().default('apnavault_session'),
   SESSION_EXPIRES_IN_DAYS: z.coerce.number().default(7),
   VERIFICATION_TOKEN_EXPIRES_HOURS: z.coerce.number().default(24),
@@ -55,6 +57,16 @@ export function validateEnv(customEnv?: Record<string, unknown>): EnvConfig {
     }
     throw new Error(`Environment validation failed:\n${errorDetails}`);
   }
+
+  // Security hardening (Finding F-03): Disallow default or insecure SESSION_SECRET in production
+  if (parsed.data.NODE_ENV === 'production' && parsed.data.SESSION_SECRET === DEFAULT_SESSION_SECRET) {
+    const errorMsg = 'SESSION_SECRET must be set to a secure custom value and cannot use the default secret in production.';
+    if ((customEnv?.NODE_ENV ?? process.env.NODE_ENV) !== 'test') {
+      console.error(errorMsg);
+    }
+    throw new Error(`Environment validation failed:\n${errorMsg}`);
+  }
+
   return parsed.data;
 }
 
