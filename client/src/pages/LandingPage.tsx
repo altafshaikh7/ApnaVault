@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/common/Button.js';
 
+const currentYear = new Date().getFullYear();
+
 export const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -165,7 +167,7 @@ export const LandingPage: React.FC = () => {
             <span>ApnaVault</span>
             <span className="text-slate-500 font-normal">| Your Family. Every Important Document. One Safe Place.</span>
           </div>
-          <div>© {new Date().getFullYear()} ApnaVault. Built with security & privacy for Indian families.</div>
+          <div>© {currentYear} ApnaVault. Built with security & privacy for Indian families.</div>
         </div>
       </footer>
     </div>
