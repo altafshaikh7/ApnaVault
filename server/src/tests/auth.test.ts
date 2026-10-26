@@ -11,7 +11,7 @@ function getSessionCookie(res: any): string | undefined {
 }
 
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { app } from '../app.js';
@@ -19,6 +19,7 @@ import { User } from '../models/User.js';
 import { Session } from '../models/Session.js';
 import { TokenService } from '../services/tokenService.js';
 import { PasswordService } from '../services/passwordService.js';
+import { EmailService } from '../services/emailService.js';
 
 let mongod: MongoMemoryServer;
 
@@ -36,6 +37,8 @@ afterAll(async () => {
 beforeEach(async () => {
   await User.deleteMany({});
   await Session.deleteMany({});
+  vi.spyOn(EmailService, 'sendVerificationEmail').mockResolvedValue({ delivered: false, reason: 'MOCKED_TEST' });
+  vi.spyOn(EmailService, 'sendPasswordResetEmail').mockResolvedValue({ delivered: false, reason: 'MOCKED_TEST' });
 });
 
 describe('Phase 4: Complete Authentication System', () => {
@@ -319,6 +322,51 @@ describe('Phase 4: Complete Authentication System', () => {
 
       expect(res.status).toBe(400);
     });
+
+    it('should return uniform generic response for resend-verification without leaking account existence (F-05)', async () => {
+      // 1. Non-existent email
+      const nonExistentRes = await request(app)
+        .post('/api/v1/auth/resend-verification')
+        .send({ email: 'nonexistent.user.12345@example.com' });
+
+      expect(nonExistentRes.status).toBe(200);
+      expect(nonExistentRes.body.success).toBe(true);
+      expect(nonExistentRes.body.data).toBeNull();
+      expect(nonExistentRes.body.message).toContain('If an unverified account exists');
+      expect(JSON.stringify(nonExistentRes.body)).not.toContain('ACCOUNT_NOT_FOUND');
+
+      // 2. Existing unverified email
+      await request(app).post('/api/v1/auth/register').send({
+        name: 'Unverified Test',
+        email: 'unverified.resend@example.com',
+        password: 'SecurePassword123!',
+      });
+
+      const unverifiedRes = await request(app)
+        .post('/api/v1/auth/resend-verification')
+        .send({ email: 'unverified.resend@example.com' });
+
+      expect(unverifiedRes.status).toBe(200);
+      expect(unverifiedRes.body.success).toBe(true);
+      expect(unverifiedRes.body.data).toBeNull();
+      expect(unverifiedRes.body.message).toContain('If an unverified account exists');
+
+      // 3. Already verified email
+      await User.updateOne({ email: 'unverified.resend@example.com' }, { isEmailVerified: true });
+
+      const verifiedRes = await request(app)
+        .post('/api/v1/auth/resend-verification')
+        .send({ email: 'unverified.resend@example.com' });
+
+      expect(verifiedRes.status).toBe(200);
+      expect(verifiedRes.body.success).toBe(true);
+      expect(verifiedRes.body.data).toBeNull();
+      expect(JSON.stringify(verifiedRes.body)).not.toContain('ALREADY_VERIFIED');
+
+      // Responses must be completely indistinguishable
+      expect(nonExistentRes.body).toEqual(unverifiedRes.body);
+      expect(unverifiedRes.body).toEqual(verifiedRes.body);
+    });
   });
 
   describe('Password Reset (Forgot & Reset Password)', () => {
@@ -427,6 +475,45 @@ describe('Phase 4: Complete Authentication System', () => {
 
       expect(res.status).toBe(403);
       expect(res.body.error.message).toContain('CSRF');
+    });
+
+    it('should reject Bearer-authenticated state-changing requests from a browser origin when CSRF token is missing (F-02)', async () => {
+      const regRes = await request(app).post('/api/v1/auth/register').send({
+        name: 'Bearer User',
+        email: 'bearer.csrf@example.com',
+        password: 'SecurePassword123!',
+      });
+      const cookieHeader = getSessionCookie(regRes);
+      const tokenMatch = cookieHeader?.match(/apnavault_session=([^;]+)/);
+      const rawToken = tokenMatch ? tokenMatch[1] : '';
+
+      // Call logout with Bearer token AND an Origin header (browser context), but no CSRF token
+      const res = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${rawToken}`)
+        .set('Origin', 'http://localhost:5173');
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.message).toContain('CSRF');
+    });
+
+    it('should allow Bearer-authenticated state-changing requests from non-browser callers without Origin header (F-02)', async () => {
+      const regRes = await request(app).post('/api/v1/auth/register').send({
+        name: 'Mobile User',
+        email: 'mobile.nocsrf@example.com',
+        password: 'SecurePassword123!',
+      });
+      const cookieHeader = getSessionCookie(regRes);
+      const tokenMatch = cookieHeader?.match(/apnavault_session=([^;]+)/);
+      const rawToken = tokenMatch ? tokenMatch[1] : '';
+
+      // Call logout with Bearer token from a non-browser caller (no Origin header, no Cookie)
+      const res = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', `Bearer ${rawToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
     });
   });
 });
