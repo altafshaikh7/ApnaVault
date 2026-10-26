@@ -222,11 +222,11 @@ export class AuthService {
 
     // Prevent account enumeration: do not reveal if email is not found
     if (!user) {
-      return { delivered: false, reason: 'ACCOUNT_NOT_FOUND' };
+      return { delivered: false };
     }
 
     if (user.isEmailVerified) {
-      return { delivered: true, reason: 'ALREADY_VERIFIED' };
+      return { delivered: false };
     }
 
     const rawToken = TokenService.generateRandomToken(32);
