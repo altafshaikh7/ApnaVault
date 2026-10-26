@@ -1,16 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, FolderSearch } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce.js';
 import { DOCUMENT_CATEGORIES, type DocumentCategory, type DocumentItem } from '../types/document.js';
 import { DocumentCard } from '../components/documents/DocumentCard.js';
 import { EmptyState } from '../components/common/EmptyState.js';
+import { LoadingState } from '../components/common/LoadingState.js';
+import { DocumentPreviewModal } from '../components/documents/DocumentPreviewModal.js';
+import { listDocuments } from '../services/documentApi.js';
 
 export const SearchPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory | 'all'>('all');
-  const [documents] = useState<DocumentItem[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setError(null);
+
+    listDocuments({
+      search: debouncedSearch.trim() || undefined,
+      category: selectedCategory === 'all' ? undefined : selectedCategory,
+    })
+      .then((docs) => {
+        if (active) {
+          setDocuments(docs);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setError('Failed to load search results.');
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [debouncedSearch, selectedCategory]);
 
   return (
     <div className="space-y-6">
@@ -24,6 +57,11 @@ export const SearchPage: React.FC = () => {
       </div>
 
       {/* Main Search Input */}
+      {error && (
+        <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200">
+          {error}
+        </div>
+      )}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-4">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -77,11 +115,13 @@ export const SearchPage: React.FC = () => {
             ? `Search query: "${debouncedSearch}"`
             : 'Enter a keyword above to search your vault'}
         </span>
-        <span>{documents.length} results</span>
+        <span>{isLoading ? 'Searching...' : `${documents.length} results`}</span>
       </div>
 
       {/* Results List or Empty State */}
-      {documents.length === 0 ? (
+      {isLoading ? (
+        <LoadingState message="Searching your documents..." />
+      ) : documents.length === 0 ? (
         <EmptyState
           icon={<FolderSearch className="w-8 h-8 text-slate-400" />}
           title={debouncedSearch ? 'No matching documents found' : 'Ready to search'}
@@ -94,10 +134,22 @@ export const SearchPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {documents.map((doc) => (
-            <DocumentCard key={doc.id} document={doc} />
+            <DocumentCard
+              key={doc.id}
+              document={doc}
+              onPreview={(d) => setPreviewDoc(d)}
+            />
           ))}
         </div>
       )}
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={Boolean(previewDoc)}
+        onClose={() => setPreviewDoc(null)}
+        documentId={previewDoc?.id || null}
+        documentTitle={previewDoc?.title || ''}
+      />
     </div>
   );
 };
