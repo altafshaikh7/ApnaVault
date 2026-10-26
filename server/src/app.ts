@@ -22,12 +22,10 @@ if (env.NODE_ENV === 'production') {
 // Security headers
 app.use(helmet());
 
-// CORS configuration – allow any origin in development for flexibility, restrict in production
-const corsOptions = env.NODE_ENV === 'development' ? {
-  origin: true, // reflect request origin
-  credentials: true,
-} : {
-  origin: [env.CLIENT_URL, env.FRONTEND_URL],
+// CORS configuration – restrict to explicitly configured client/frontend origins across all environments
+const allowedOrigins = Array.from(new Set([env.CLIENT_URL, env.FRONTEND_URL]));
+const corsOptions = {
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-XSRF-Token'],
