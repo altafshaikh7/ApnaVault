@@ -3,7 +3,21 @@ import { z } from 'zod';
 
 dotenv.config();
 
+const optionalSupabaseValue = (schema: z.ZodType<string | undefined>) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    schema.optional()
+  );
+
 export const envSchema = z.object({
+  // Supabase configuration
+  SUPABASE_URL: optionalSupabaseValue(z.string().url()),
+  SUPABASE_SERVICE_ROLE_KEY: optionalSupabaseValue(z.string()),
+  SUPABASE_STORAGE_AUTHORIZATION_JWT: optionalSupabaseValue(z.string()),
+  // Application storage quota (bytes) - conservative limit for free tier
+  SUPABASE_BUCKET_NAME: z.string().optional(),
+  APP_STORAGE_QUOTA_BYTES: z.coerce.number().default(950 * 1024 * 1024), // 950 MB
+
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(5000),
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
