@@ -2,10 +2,16 @@ import { createServer } from 'http';
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
+import { DocumentService } from './services/documentService.js';
 
 async function bootstrap(): Promise<void> {
   // Connect to database
   await connectDatabase();
+
+  const deletionReconciliationTimer = setInterval(() => {
+    void DocumentService.reconcilePendingDeletions();
+  }, 60_000);
+  deletionReconciliationTimer.unref();
 
   const server = createServer(app);
 
@@ -16,6 +22,7 @@ async function bootstrap(): Promise<void> {
 
   const handleShutdown = async (signal: string) => {
     console.log(`\n[Server] Received ${signal}. Initiating graceful shutdown...`);
+    clearInterval(deletionReconciliationTimer);
 
     server.close(async () => {
       console.log('[Server] HTTP server closed');
