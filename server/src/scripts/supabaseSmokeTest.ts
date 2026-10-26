@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { env } from '../config/env.js';
 import { assertSupabaseServerKey } from '../config/supabase.js';
-import { assertPrivateBucketAvailable, deleteFromStorage, getSignedDownloadUrl, uploadToStorage } from '../services/storageService.js';
+import { assertPrivateBucketAvailable, deleteFromStorage, getSignedDownloadUrl, SIGNED_URL_EXPIRY_SECONDS, uploadToStorage } from '../services/storageService.js';
 import { describeSmokeFailure } from './supabaseSmokeDiagnostics.js';
 import { validateFile } from '../utils/fileValidator.js';
 
@@ -39,7 +39,7 @@ async function runSmokeTest(): Promise<void> {
     uploaded = true;
 
     operation = 'create_signed_url';
-    const signedUrl = await getSignedDownloadUrl(storageKey, 60);
+    const signedUrl = await getSignedDownloadUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
     if (!URL.canParse(signedUrl)) {
       throw new Error('Signed URL validation failed');
     }
