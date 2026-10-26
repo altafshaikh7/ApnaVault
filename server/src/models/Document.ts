@@ -17,6 +17,7 @@ export interface IDocument extends MongooseDocument {
   tags: string[];
   ownerId: Types.ObjectId;
   workspaceId?: Types.ObjectId;
+  folderId?: Types.ObjectId | null;
   isPersonal: boolean;
   storageKey: string;
   originalFileName: string;
@@ -80,6 +81,12 @@ const documentSchema = new Schema<IDocument>(
     workspaceId: {
       type: Schema.Types.ObjectId,
       ref: 'Workspace',
+      default: null,
+      index: true,
+    },
+    folderId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Folder',
       default: null,
       index: true,
     },
@@ -147,6 +154,7 @@ const documentSchema = new Schema<IDocument>(
 // Compound indexes for authorization and common search queries
 documentSchema.index({ ownerId: 1, isPersonal: 1, isDeleted: 1 });
 documentSchema.index({ workspaceId: 1, isPersonal: 1, isDeleted: 1 });
+documentSchema.index({ folderId: 1, isDeleted: 1 });
 documentSchema.index({ expiryDate: 1, isDeleted: 1 });
 documentSchema.index({ category: 1, ownerId: 1 });
 
