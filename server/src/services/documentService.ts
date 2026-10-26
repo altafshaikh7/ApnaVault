@@ -11,6 +11,7 @@ import {
   deleteFromStorage,
   getSignedDownloadUrl,
   uploadToStorage,
+  SIGNED_URL_EXPIRY_SECONDS,
 } from './storageService.js';
 import { sanitizeOriginalFilename, sha256Checksum } from '../utils/fileValidator.js';
 
@@ -226,7 +227,7 @@ export class DocumentService {
 
   public static async getDownloadUrl(ownerId: Types.ObjectId, id: string): Promise<string> {
     const document = await this.get(ownerId, id);
-    return getSignedDownloadUrl(document.storageKey, 60);
+    return getSignedDownloadUrl(document.storageKey, SIGNED_URL_EXPIRY_SECONDS);
   }
 
   public static async delete(ownerId: Types.ObjectId, id: string): Promise<void> {
