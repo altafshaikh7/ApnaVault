@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/authContextValue.js';
+import { apiClient } from '../services/apiClient.js';
 import {
   User,
   Shield,
@@ -12,17 +14,45 @@ import { Card, CardTitle, CardDescription } from '../components/common/Card.js';
 import { Input } from '../components/common/Input.js';
 
 export const SettingsPage: React.FC = () => {
+  const auth = useContext(AuthContext);
+  if (!auth) return null;
+  const { user, refreshUser } = auth;
+  const email = user?.email ?? '';
+
+  // Populate fields when user data becomes available
+  useEffect(() => {
+    if (user) {
+      setName(user.name ?? '');
+      setPhone(user.phone ?? '');
+      setTimezone(user.timezone ?? 'Asia/Kolkata (IST)');
+    }
+  }, [user]);
+
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'notifications' | 'storage'>('profile');
-  const [name, setName] = useState('Household Admin');
-  const [email] = useState('admin@household.local');
-  const [phone, setPhone] = useState('+91 98765 43210');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [timezone, setTimezone] = useState('Asia/Kolkata (IST)');
   const [savedNotice, setSavedNotice] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedNotice(true);
-    setTimeout(() => setSavedNotice(false), 3000);
+    setErrorMsg(null);
+    setIsSaving(true);
+    try {
+      const payload: Record<string, any> = { name };
+      if (phone) payload.phone = phone;
+      if (timezone) payload.timezone = timezone;
+      await apiClient.put('/auth/me', payload);
+      await refreshUser();
+      setSavedNotice(true);
+      setTimeout(() => setSavedNotice(false), 3000);
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Failed to update profile');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -40,6 +70,12 @@ export const SettingsPage: React.FC = () => {
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>Preferences updated successfully.</span>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl flex items-center gap-2">
+          <span>{errorMsg}</span>
         </div>
       )}
 
@@ -141,7 +177,7 @@ export const SettingsPage: React.FC = () => {
           </Card>
 
           <div className="flex justify-end">
-            <Button type="submit" variant="primary" size="md" leftIcon={<Save className="w-4 h-4" />}>
+            <Button type="submit" variant="primary" size="md" leftIcon={<Save className="w-4 h-4" />} isLoading={isSaving} disabled={isSaving}>
               Save Changes
             </Button>
           </div>
@@ -154,21 +190,9 @@ export const SettingsPage: React.FC = () => {
             <CardTitle>Change Password</CardTitle>
             <CardDescription>Ensure your password is long and unique</CardDescription>
 
-            <Input
-              label="Current Password"
-              type="password"
-              placeholder="••••••••••••"
-            />
-            <Input
-              label="New Password"
-              type="password"
-              placeholder="At least 8 characters"
-            />
-            <Input
-              label="Confirm New Password"
-              type="password"
-              placeholder="Repeat new password"
-            />
+            <Input label="Current Password" type="password" placeholder="••••••••••••" />
+            <Input label="New Password" type="password" placeholder="At least 8 characters" />
+            <Input label="Confirm New Password" type="password" placeholder="Repeat new password" />
 
             <div className="pt-2">
               <Button variant="primary" size="sm">
@@ -246,9 +270,7 @@ export const SettingsPage: React.FC = () => {
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div className="bg-emerald-600 h-full rounded-full" style={{ width: '0%' }} />
               </div>
-              <p className="text-[11px] text-slate-400">
-                0% of your free household storage quota used.
-              </p>
+              <p className="text-[11px] text-slate-400">0% of your free household storage quota used.</p>
             </div>
           </Card>
 
