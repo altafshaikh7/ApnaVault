@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateEnv } from '../config/env.js';
+import { validateEnv, DEFAULT_SESSION_SECRET } from '../config/env.js';
 
 describe('Environment Configuration Validation', () => {
   it('should validate valid environment variables with default values', () => {
@@ -53,5 +53,30 @@ describe('Environment Configuration Validation', () => {
         NODE_ENV: 'staging' as any,
       })
     ).toThrow(/Environment validation failed/);
+  });
+
+  it('should throw an error when SESSION_SECRET uses the default value in production', () => {
+    expect(() =>
+      validateEnv({
+        NODE_ENV: 'production',
+        SESSION_SECRET: DEFAULT_SESSION_SECRET,
+      })
+    ).toThrow(/SESSION_SECRET must be set to a secure custom value/);
+
+    expect(() =>
+      validateEnv({
+        NODE_ENV: 'production',
+      })
+    ).toThrow(/SESSION_SECRET must be set to a secure custom value/);
+  });
+
+  it('should accept a custom 32+ character SESSION_SECRET in production', () => {
+    const config = validateEnv({
+      NODE_ENV: 'production',
+      SESSION_SECRET: 'a_very_secure_production_secret_key_12345',
+    });
+
+    expect(config.NODE_ENV).toBe('production');
+    expect(config.SESSION_SECRET).toBe('a_very_secure_production_secret_key_12345');
   });
 });
