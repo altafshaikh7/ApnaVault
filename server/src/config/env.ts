@@ -9,7 +9,7 @@ const optionalSupabaseValue = (schema: z.ZodType<string | undefined>) =>
     schema.optional()
   );
 
-export const DEFAULT_SESSION_SECRET = 'apnavault_default_session_secret_32_characters_long_min';
+export const DEFAULT_SESSION_SECRET = 'apnavault_development_session_secret_min_32_characters_long';
 
 export const envSchema = z.object({
   // Supabase configuration
@@ -20,7 +20,7 @@ export const envSchema = z.object({
   SUPABASE_BUCKET_NAME: z.string().optional(),
   APP_STORAGE_QUOTA_BYTES: z.coerce.number().default(950 * 1024 * 1024), // 950 MB
 
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z.enum(['development', 'production', 'test']),
   PORT: z.coerce.number().default(5000),
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
@@ -48,7 +48,8 @@ export const envSchema = z.object({
 export type EnvConfig = z.infer<typeof envSchema>;
 
 export function validateEnv(customEnv?: Record<string, unknown>): EnvConfig {
-  const parsed = envSchema.safeParse(customEnv ?? process.env);
+  const sourceEnv = customEnv ?? process.env;
+  const parsed = envSchema.safeParse(sourceEnv);
   if (!parsed.success) {
     const errorDetails = JSON.stringify(parsed.error.format(), null, 2);
     if ((customEnv?.NODE_ENV ?? process.env.NODE_ENV) !== 'test') {
@@ -58,13 +59,38 @@ export function validateEnv(customEnv?: Record<string, unknown>): EnvConfig {
     throw new Error(`Environment validation failed:\n${errorDetails}`);
   }
 
-  // Security hardening (Finding F-03): Disallow default or insecure SESSION_SECRET in production
-  if (parsed.data.NODE_ENV === 'production' && parsed.data.SESSION_SECRET === DEFAULT_SESSION_SECRET) {
-    const errorMsg = 'SESSION_SECRET must be set to a secure custom value and cannot use the default secret in production.';
+  if (
+    typeof sourceEnv.RENDER_SERVICE_ID === 'string' &&
+    parsed.data.NODE_ENV !== 'production' &&
+    parsed.data.NODE_ENV !== 'test'
+  ) {
+    throw new Error('Environment validation failed:\nNODE_ENV must be production for Render services.');
+  }
+
+  if (
+    parsed.data.NODE_ENV === 'production' &&
+    (parsed.data.SESSION_SECRET === DEFAULT_SESSION_SECRET ||
+      typeof sourceEnv.SESSION_SECRET !== 'string' ||
+      sourceEnv.SESSION_SECRET.trim().length < 32)
+  ) {
+    const errorMsg = 'SESSION_SECRET must be set to a custom value of at least 32 characters in production.';
     if ((customEnv?.NODE_ENV ?? process.env.NODE_ENV) !== 'test') {
       console.error(errorMsg);
     }
     throw new Error(`Environment validation failed:\n${errorMsg}`);
+  }
+
+  if (parsed.data.NODE_ENV === 'production') {
+    for (const variable of ['CLIENT_URL', 'FRONTEND_URL'] as const) {
+      const configuredValue = sourceEnv[variable];
+      if (typeof configuredValue !== 'string' || configuredValue.trim() === '') {
+        throw new Error(`Environment validation failed:\n${variable} must be configured in production.`);
+      }
+
+      if (new URL(parsed.data[variable]).protocol !== 'https:') {
+        throw new Error(`Environment validation failed:\n${variable} must use HTTPS in production.`);
+      }
+    }
   }
 
   return parsed.data;
