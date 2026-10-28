@@ -55,28 +55,58 @@ describe('Environment Configuration Validation', () => {
     ).toThrow(/Environment validation failed/);
   });
 
+  it('should require NODE_ENV rather than silently defaulting to development', () => {
+    expect(() => validateEnv({})).toThrow(/Environment validation failed/);
+  });
+
+  it('should require production mode for a Render service', () => {
+    expect(() =>
+      validateEnv({
+        NODE_ENV: 'development',
+        RENDER_SERVICE_ID: 'srv-test',
+      })
+    ).toThrow(/NODE_ENV must be production for Render services/);
+  });
+
   it('should throw an error when SESSION_SECRET uses the default value in production', () => {
     expect(() =>
       validateEnv({
         NODE_ENV: 'production',
         SESSION_SECRET: DEFAULT_SESSION_SECRET,
+        CLIENT_URL: 'https://client.example.com',
+        FRONTEND_URL: 'https://client.example.com',
       })
-    ).toThrow(/SESSION_SECRET must be set to a secure custom value/);
+    ).toThrow(/SESSION_SECRET must be set to a custom value/);
 
     expect(() =>
       validateEnv({
         NODE_ENV: 'production',
+        CLIENT_URL: 'https://client.example.com',
+        FRONTEND_URL: 'https://client.example.com',
       })
-    ).toThrow(/SESSION_SECRET must be set to a secure custom value/);
+    ).toThrow(/SESSION_SECRET must be set to a custom value/);
   });
 
   it('should accept a custom 32+ character SESSION_SECRET in production', () => {
     const config = validateEnv({
       NODE_ENV: 'production',
       SESSION_SECRET: 'a_very_secure_production_secret_key_12345',
+      CLIENT_URL: 'https://client.example.com',
+      FRONTEND_URL: 'https://client.example.com',
     });
 
     expect(config.NODE_ENV).toBe('production');
     expect(config.SESSION_SECRET).toBe('a_very_secure_production_secret_key_12345');
+  });
+
+  it('should require HTTPS client origins in production', () => {
+    expect(() =>
+      validateEnv({
+        NODE_ENV: 'production',
+        SESSION_SECRET: 'a_very_secure_production_secret_key_12345',
+        CLIENT_URL: 'http://client.example.com',
+        FRONTEND_URL: 'https://client.example.com',
+      })
+    ).toThrow(/CLIENT_URL must use HTTPS in production/);
   });
 });
