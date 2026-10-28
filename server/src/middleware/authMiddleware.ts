@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/authService.js';
 import { env } from '../config/env.js';
+import { getCookieSecurityOptions } from '../config/cookieOptions.js';
 import { AppError } from '../utils/AppError.js';
 import type { IUser } from '../models/User.js';
 import type { ISession } from '../models/Session.js';
@@ -22,8 +23,7 @@ export function setSessionCookie(res: Response, token: string): void {
   const maxAge = env.SESSION_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000;
   res.cookie(env.SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    ...getCookieSecurityOptions(env.NODE_ENV),
     path: '/',
     maxAge,
   });
@@ -35,8 +35,7 @@ export function setSessionCookie(res: Response, token: string): void {
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(env.SESSION_COOKIE_NAME, {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    ...getCookieSecurityOptions(env.NODE_ENV),
     path: '/',
   });
 }
