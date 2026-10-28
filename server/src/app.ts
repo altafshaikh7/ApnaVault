@@ -11,6 +11,7 @@ import { sanitizeInput } from './middleware/sanitize.js';
 import { standardRateLimiter } from './middleware/rateLimiter.js';
 import { authenticateSession } from './middleware/authMiddleware.js';
 import { validateCsrf } from './middleware/csrf.js';
+import { getAllowedOrigins } from './config/origins.js';
 
 export const app = express();
 
@@ -23,7 +24,7 @@ if (env.NODE_ENV === 'production') {
 app.use(helmet());
 
 // CORS configuration – restrict to explicitly configured client/frontend origins across all environments
-const allowedOrigins = Array.from(new Set([env.CLIENT_URL, env.FRONTEND_URL]));
+const allowedOrigins = getAllowedOrigins(env.CLIENT_URL, env.FRONTEND_URL);
 const corsOptions = {
   origin: allowedOrigins,
   credentials: true,
