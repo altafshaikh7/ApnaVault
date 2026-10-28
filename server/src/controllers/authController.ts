@@ -10,6 +10,7 @@ export class AuthController {
   public static getCsrfToken(_req: Request, res: Response): void {
     const token = generateCsrfToken();
     setCsrfCookie(res, token);
+    res.setHeader('Cache-Control', 'no-store');
     sendSuccess(res, { csrfToken: token }, 'CSRF token initialized');
   }
 
