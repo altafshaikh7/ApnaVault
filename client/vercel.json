@@ -1,0 +1,19 @@
+{
+  "rewrites": [
+    { "source": "/dashboard", "destination": "/index.html" },
+    { "source": "/login", "destination": "/index.html" },
+    { "source": "/register", "destination": "/index.html" },
+    { "source": "/verify-email", "destination": "/index.html" },
+    { "source": "/forgot-password", "destination": "/index.html" },
+    { "source": "/reset-password", "destination": "/index.html" },
+    { "source": "/documents", "destination": "/index.html" },
+    { "source": "/documents/:id", "destination": "/index.html" },
+    { "source": "/upload", "destination": "/index.html" },
+    { "source": "/search", "destination": "/index.html" },
+    { "source": "/family", "destination": "/index.html" },
+    { "source": "/reminders", "destination": "/index.html" },
+    { "source": "/notifications", "destination": "/index.html" },
+    { "source": "/settings", "destination": "/index.html" },
+    { "source": "/404", "destination": "/index.html" }
+  ]
+}
