@@ -20,6 +20,7 @@ import { Session } from '../models/Session.js';
 import { TokenService } from '../services/tokenService.js';
 import { PasswordService } from '../services/passwordService.js';
 import { EmailService } from '../services/emailService.js';
+import { env } from '../config/env.js';
 
 let mongod: MongoMemoryServer;
 
@@ -150,6 +151,66 @@ describe('Phase 4: Complete Authentication System', () => {
       expect(sessionCount).toBeGreaterThanOrEqual(1);
     });
 
+    it('should log in from the configured browser origin with matching CSRF cookie and header', async () => {
+      const csrfRes = await request(app)
+        .get('/api/v1/auth/csrf-token')
+        .set('Origin', env.CLIENT_URL);
+      const csrfToken = csrfRes.body.data.csrfToken as string;
+      const csrfCookie = getCsrfCookie(csrfRes)?.split(';', 1)[0];
+
+      expect(csrfToken).toHaveLength(64);
+      expect(csrfCookie).toBe(`apnavault_csrf=${csrfToken}`);
+
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', env.CLIENT_URL)
+        .set('Cookie', csrfCookie!)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: validUserPayload.email,
+          password: validUserPayload.password,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.user.email).toBe(validUserPayload.email);
+      expect(getSessionCookie(res)).toContain('HttpOnly');
+    });
+
+    it('should reject a browser-origin login when the CSRF header and cookie do not match', async () => {
+      const csrfRes = await request(app).get('/api/v1/auth/csrf-token');
+      const csrfCookie = getCsrfCookie(csrfRes)?.split(';', 1)[0];
+
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', env.CLIENT_URL)
+        .set('Cookie', csrfCookie!)
+        .set('X-CSRF-Token', 'mismatched-csrf-token')
+        .send({
+          email: validUserPayload.email,
+          password: validUserPayload.password,
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.message).toContain('CSRF token');
+    });
+
+    it('should reject a browser-origin login when the CSRF cookie is missing', async () => {
+      const csrfRes = await request(app).get('/api/v1/auth/csrf-token');
+      const csrfToken = csrfRes.body.data.csrfToken as string;
+
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', env.CLIENT_URL)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: validUserPayload.email,
+          password: validUserPayload.password,
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.message).toContain('CSRF token');
+    });
+
     it('should normalize email casing and whitespace on login', async () => {
       const res = await request(app).post('/api/v1/auth/login').send({
         email: '   AARAV.sharma@EXAMPLE.com   ',
@@ -180,6 +241,25 @@ describe('Phase 4: Complete Authentication System', () => {
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
       expect(res.body.error.message).toBe('Invalid email or password');
+    });
+  });
+
+  describe('CSRF token endpoint (GET /api/v1/auth/csrf-token)', () => {
+    it('should return a token and set a matching frontend-readable cookie', async () => {
+      const res = await request(app)
+        .get('/api/v1/auth/csrf-token')
+        .set('Origin', env.CLIENT_URL);
+
+      const cookie = getCsrfCookie(res);
+      expect(res.status).toBe(200);
+      expect(res.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+      expect(cookie).toContain(`apnavault_csrf=${res.body.data.csrfToken}`);
+      expect(cookie).toContain('Path=/');
+      expect(cookie).toContain('SameSite=Lax');
+      expect(cookie).not.toContain('HttpOnly');
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['access-control-allow-origin']).toBe(env.CLIENT_URL);
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
     });
   });
 
