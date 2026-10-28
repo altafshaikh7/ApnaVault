@@ -92,9 +92,11 @@ apnavault/
 
 | Variable | Scope | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `NODE_ENV` | Server | `development` | Runtime environment (`development`, `production`, `test`) |
+| `NODE_ENV` | Server | Required | Runtime environment (`development`, `production`, `test`) |
 | `PORT` | Server | `5000` | Port for the Express backend server |
 | `CLIENT_URL` | Server | `http://localhost:5173` | Allowed origin for CORS |
+| `FRONTEND_URL` | Server | `http://localhost:5173` | Frontend origin used for links and CORS |
+| `SESSION_SECRET` | Server | Development-only placeholder | Session signing secret; production requires a custom value of at least 32 characters |
 | `MONGODB_URI` | Server | `mongodb://127.0.0.1:27017/apnavault` | MongoDB connection string |
 | `SUPABASE_URL` | Server | — | Supabase project URL shown in the project Connect dialog |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server | — | Server-only Supabase API key (`sb_secret_...` recommended) or legacy `service_role` JWT. Never configure it in the client. |
@@ -104,6 +106,12 @@ apnavault/
 | `VITE_API_URL` | Client | `http://localhost:5000/api/v1` | Base URL for API calls from client |
 
 `APP_STORAGE_QUOTA_BYTES` is the maximum quota per user, not a global storage cap. Upload reservation enforces it for both new and existing accounts without rewriting persisted `storageQuotaBytes`; existing accounts with a lower stored quota retain that lower limit.
+
+### Production authentication deployment
+
+Configure the Render service with `NODE_ENV=production`, a unique random `SESSION_SECRET` of at least 32 characters, and the HTTPS origins in both `CLIENT_URL` and `FRONTEND_URL`. These variables must be explicitly configured; the server does not silently select development mode, rejects a Render service running in development mode, and production startup rejects missing origins, non-HTTPS origins, or the development secret. For the Vercel deployment, set `VITE_API_URL` to the Render API base URL, such as `https://apnavault.onrender.com/api/v1`.
+
+In production, both the session and CSRF cookies use `Secure; SameSite=None` so browsers can send them between different sites. Local development keeps `SameSite=Lax`. The frontend must use credentialed requests and the CSRF header; browsers that block third-party cookies may still prevent this cross-site setup from working. A same-site custom domain for the frontend and API is the more reliable deployment option.
 
 Create the configured Supabase Storage bucket as **private** before enabling document operations. The server rejects a missing or public bucket, and document operations remain unavailable until the server-side Supabase settings are configured.
 
