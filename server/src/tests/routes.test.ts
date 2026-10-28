@@ -75,6 +75,12 @@ describe('API Foundation & Health Check Routes', () => {
       .set('Origin', 'http://malicious-attacker.com');
 
     expect(blockedRes.headers['access-control-allow-origin']).toBeUndefined();
+
+    const blockedMutation = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Origin', 'http://malicious-attacker.com')
+      .send({});
+    expect(blockedMutation.status).toBe(403);
   });
 
   it('rate limiter skip should strictly be bound to Vitest environment (F-07)', () => {
