@@ -4,13 +4,19 @@ import type { User } from '../types/user.js';
 import type { ApiResponse } from '../types/api.js';
 import { AuthContext } from './authContextValue.js';
 
+async function initializeCsrfToken(): Promise<void> {
+  const csrfRes = await apiClient.get<ApiResponse<{ csrfToken: string }>>('/auth/csrf-token');
+  const csrfToken = csrfRes?.data?.csrfToken;
+  if (!csrfToken) {
+    throw new Error('Unable to initialize request security. Please refresh and try again.');
+  }
+  apiClient.setCsrfToken(csrfToken);
+}
+
 async function initializeAuth(): Promise<User | null> {
   try {
     try {
-      const csrfRes = await apiClient.get<ApiResponse<{ csrfToken: string }>>('/auth/csrf-token');
-      if (csrfRes?.data?.csrfToken) {
-        apiClient.setCsrfToken(csrfRes.data.csrfToken);
-      }
+      await initializeCsrfToken();
     } catch {
       // Continue session initialization if the CSRF endpoint is unavailable.
     }
@@ -42,6 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
+    await initializeCsrfToken();
     const res = await apiClient.post<ApiResponse<{ user: User }>>('/auth/login', {
       email,
       password,
@@ -56,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     password: string
   ): Promise<{ emailDelivery?: { delivered: boolean; reason?: string } }> => {
+    await initializeCsrfToken();
     const res = await apiClient.post<
       ApiResponse<{ user: User; emailDelivery?: { delivered: boolean; reason?: string } }>
     >('/auth/register', {
